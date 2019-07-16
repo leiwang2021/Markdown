@@ -35,4 +35,18 @@
 
   Provides train/test indices to split data in train/test sets.
 
+- OneHotEncoder
+
+  - Encode categorical integer features as a one-hot numeric array.
+  - fit(self,X[,y])   Fit OneHotEncoder to X.
+  - fit_transform(self, X[, y])    Fit OneHotEncoder to X, then transform X.
+  - transform(self, X)    Transform X using one-hot encoding.
+
+- LabelEncoder
+
+  - Encode labels with value between 0 and n_classes-1.
+  - fit(self. y)  Fit label encoder
+  - fit_transform(self, y)  Fit label encoder and return encoded labels
+  - transform(self, y)   Transform labels to normalized encoding
+
   

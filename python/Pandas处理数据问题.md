@@ -296,5 +296,19 @@
 
   x.date()  获得的是日期
 
+- 利用pandas绘图
+
+  - `DataFrame.plot.bar`(*x=None*, *y=None*, ***kwds*)
+  - ‘line’ : line plot (default)#折线图
+  - ‘bar’ : vertical bar plot#条形图
+  - ‘barh’ : horizontal bar plot#横向条形图
+  - ‘hist’ : histogram#柱状图
+  - ‘box’ : boxplot#箱线图
+  - 例如：item_attr.item_price.value_counts().head(50).plot.bar(figsize=(15,9))  画出前５０个元素的dataframe的柱状图，figsize指明大小
+
+- pd.to_datetime
+
+  - Convert argument to datetime.
+
 
 
