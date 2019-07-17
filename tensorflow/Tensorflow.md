@@ -32,7 +32,106 @@
 
   主要使用params, ids两个参数，函数的功能是从params中挑出索引为ids的元素，并返回一个张量，假设params的shape是batch * hidden, ids的shape是batch * n
   那么函数返回张量的shape是batch *n * hidden
+
 - embedding层就是以one hot为输入的全连接层
+
+- tf.Variable(),tf.get_variable(),tf.Variable_scope(),tf.name_scope()
+
+  - tf.Variable(<variable_name>)会自动检测命名冲突并自行处理，但tf.get_variable(<variable_name>)则遇到重名的变量创建且变量名没有设置为共享变量时，则会报错
+
+  - tf.Variable(<variable_name>)和tf.get_variable(<variable_name>)都是用于在一个name_scope下面获取或创建一个变量的两种方式，区别在于：
+    tf.Variable(<variable_name>)用于创建一个新变量，在同一个name_scope下面，可以创建相同名字的变量，底层实现会自动引入别名机制，两次调用产生了其实是两个不同的变量。
+    tf.get_variable(<variable_name>)用于获取一个变量，并且不受name_scope的约束。当这个变量已经存在时，则自动获取；如果不存在，则自动创建一个变量。
+
+  - Variable是定义变量，而get_variable是获取变量（只不过如果获取不到就重新定义一个变量）
+
+    ```
+    
+    import tensorflow as tf
+     
+    v1 = tf.Variable(1,name="V1")                     # 第1句话
+    v2 = tf.Variable(2,name="V1")                     # 第2句话
+    v3 = tf.Variable(3,name="V1")                     # 第3句话
+    v4 = tf.Variable(4,name="V1_1")                   # 第4句话
+     
+    print ("v1:",v1.name)
+    print ("v2:",v2.name)
+    print ("v3:",v3.name)
+    print ("v4:",v4.name)
+     
+    v1 = tf.Variable(1,name="V1")                     # 第5句话
+    print ("v1:",v1.name)
+     
+     
+    ### 输出结果为 ###
+    # v1: V1:0
+    # v2: V1_1:0
+    # v3: V1_2:0
+    # v4: V1_1_1:0
+    # v1: V1_3:0
+    
+    
+    import tensorflow as tf
+     
+    v5 = tf.get_variable(name="V1",initializer=1)
+    v6 = tf.get_variable(name="V1",initializer=1)
+    print ("v5:",v5.name)
+    print ("v6:",v6.name)
+    #会报错，因为get_variable在没有定义变量作用域variable_scope的时候（后面会讲到）不会对＃#get_variable()创建的name相同的变量自动进行处理
+    ```
+
+  - ```
+    import tensorflow as tf
+     
+    v1 = tf.Variable(1,name="V1")
+    print ("v1:",v1.name)
+     
+    v5 = tf.get_variable(name="V1",initializer=1)
+    v6 = tf.get_variable(name="V1_1",initializer=1)
+    print ("v5:",v5.name)
+    print ("v6:",v6.name)
+     
+     
+     
+    ### 输出结果如下 ###
+    # v1: V1:0
+    # v5: V1_1:0
+    # v6: V1_1_1:0
+    ```
+
+  - ```
+    import tensorflow as tf
+     
+    with tf.variable_scope("scope1"):
+        v1 = tf.Variable(1, name="V1")
+        v2 = tf.get_variable(name="V2", initializer=1.0)
+     
+    with tf.variable_scope("scope1", reuse=True):
+        v3 = tf.Variable(1, name="V1")
+        v4 = tf.get_variable(name="V2", initializer=1.0)
+     
+    print(v1.name)
+    print(v2.name)
+    print(v3.name)
+    print(v4.name)
+     
+    print(v1 is v3, v2 is v4)
+     
+     
+     
+    ### 输出结果为 ###
+    # scope1/V1:0
+    # scope1/V2:0
+    # scope1_1/V1:0
+    # scope1/V2:0
+    # False True
+    ```
+
+  
+
+  
+
+  
 
   
 

@@ -1,7 +1,20 @@
 #!/bin/bash
 #This script dispaly the date and who's logged on
-echo The time and date are:
+echo -n "The time and date are: "
 date
 echo "Let's see who's logged into the system:"
 who
+echo "user info for userid:$USER "
+echo UID:$UID
+echo HOME:$HOME
+#test variables
+days=10
+guest='Kate'
+echo "$guest checked in $days days ago"
+testing=`date`
+testing2=$(date)
+echo "The time is:" $testing
+echo "The testing2 is :" $testing2
 
+today=$(date +%y%m%d)
+ls /usr/bin -al > log.$today
