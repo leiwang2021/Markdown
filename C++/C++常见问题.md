@@ -18,3 +18,5 @@
 - gdb的调试
 
 -  swap(S[left],S[right]);　　　swap函数可用于交换两个vector位置的元素
+-  Segmentation fault (core dumped),访问一些空的，可能会出现该问题
+       
