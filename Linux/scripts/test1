@@ -18,3 +18,4 @@ echo "The testing2 is :" $testing2
 
 today=$(date +%y%m%d)
 ls /usr/bin -al > log.$today
+exit 5

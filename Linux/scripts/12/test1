@@ -1,0 +1,13 @@
+#!/bin/bash
+#test if then
+if pwd
+then
+    echo "PWD Worked"
+fi
+
+if IMADFFD
+then 
+    echo "It worked"
+
+fi
+echo "We are outside of if-them"

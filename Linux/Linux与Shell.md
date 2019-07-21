@@ -858,6 +858,95 @@
 
 ### 11.8 退出脚本
 
+- $?保存上个已执行命令的退出状态码
+- 一个成功结束的命令退出状态码是０，错误时为一个正数值
+- exit命令
+  - 默认时，shell脚本会以脚本中的最后一个命令的退出状态码退出
+  - exit命令允许脚本结束时指定一个退出状态码
+  - 命令状态码的范围是0-255
+
+## 第12章　使用结构化命令
+
+### 12.1 if-then语句
+
+- ```shell
+  if command
+  then 
+  	command
+  fi
+  ```
+
+  如果if后的命令执行成功，则执行then后的命令，否则不执行
+
+- then部分可以使用不止一条命令
+
+### 12.2   if-then-else语句
+
+- 当if语句的命令返回非０退出状态码时，执行else部分中的命令
+
+### 12.3 嵌套if
+
+- elif
+
+  ```shell
+  if command1
+  then
+  	command2
+  elif command3
+  then
+  	command4
+  fi
+  ```
+
+### 12.4 test 命令
+
+- test condition  　条件成立时，退出返回状态码０，不成立返回非零状态码，可以和if语句合用
+
+- 另一种条件测试方法：加方括号
+
+  ```
+  if test codition
+  then
+  	comand
+  else
+  	comand
+  fi
+  
+  if [ condition ]
+  then
+  	command
+  else
+  	command
+  fi
+  ```
+
+- teset 命令可以判断三类条件
+
+  - 数值比较
+  - 字符串比较
+  - 文件比较
+
+- 数值比较
+
+  - eq  ge gt le lt ne
+  - bash shell只能处理整数
+
+- 字符串比较
+
+  -  =  !=  <  >   -n  -z
+  - \> 需要转义符号\ 
+  - sort命令处理大写字母的方法跟test命令相反
+  - test命令和测试表达式使用标准的数学比较符号来表示字符串比较，而用文本代码来表示数值比较
+  - \- n \-z  检查一个变量是否含有数据
+  - 空的和未初始化的变量会对shell脚本测试造成灾难性的影响
+
+- 文件比较
+
+  - -d  -e  -f -r  -s -w  -x -O -G   file1 -nt file2  file1  -ot file2
+  - 
+
+
+
 
 
 
