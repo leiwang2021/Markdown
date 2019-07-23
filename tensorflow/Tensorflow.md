@@ -30,10 +30,50 @@
 
 - tf.nn.embedding_lookup( params, ids, …)
 
-  主要使用params, ids两个参数，函数的功能是从params中挑出索引为ids的元素，并返回一个张量，假设params的shape是batch * hidden, ids的shape是batch * n
-  那么函数返回张量的shape是batch *n * hidden
+  主要使用params, ids两个参数，函数的功能是从params中挑出索引为ids的元素，并返回一个张量，假设params的shape是batch * hidden, ids的shape是  n*batch
+  那么函数返回张量的shape是n\ *batch\* hidden
 
 - embedding层就是以one hot为输入的全连接层
+
+- ![preview](https://pic2.zhimg.com/v2-9de68e5c46e9ea1ea480e295b0cc0b87_r.jpg)
+
+```
+import tensorflow as tf
+import numpy as np
+
+a = [[0.1, 0.2, 0.3], [1.1, 1.2, 1.3], [2.1, 2.2, 2.3], [3.1, 3.2, 3.3], [4.1, 4.2, 4.3]]
+a = np.asarray(a)
+idx1 = tf.Variable([0, 2, 3, 1], tf.int32)
+idx2 = tf.Variable([[0, 2, 3, 1], [4, 0, 2, 2]], tf.int32)
+out1 = tf.nn.embedding_lookup(a, idx1)
+out2 = tf.nn.embedding_lookup(a, idx2)
+init = tf.global_variables_initializer()
+
+with tf.Session() as sess:
+    sess.run(init)
+    print sess.run(out1)
+    print out1
+    print '=================='
+    print sess.run(out2)
+    print out2
+
+[[ 0.1  0.2  0.3]
+ [ 2.1  2.2  2.3]
+ [ 3.1  3.2  3.3]
+ [ 1.1  1.2  1.3]]
+Tensor("embedding_lookup:0", shape=(4, 3), dtype=float64)
+==================
+[[[ 0.1  0.2  0.3]
+  [ 2.1  2.2  2.3]
+  [ 3.1  3.2  3.3]
+  [ 1.1  1.2  1.3]]
+
+ [[ 4.1  4.2  4.3]
+  [ 0.1  0.2  0.3]
+  [ 2.1  2.2  2.3]
+  [ 2.1  2.2  2.3]]]
+Tensor("embedding_lookup_1:0", shape=(2, 4, 3), dtype=float64)
+```
 
 - tf.Variable(),tf.get_variable(),tf.Variable_scope(),tf.name_scope()
 

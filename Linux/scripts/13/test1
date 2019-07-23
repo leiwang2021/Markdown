@@ -1,0 +1,16 @@
+#!/bin/bash
+#循环
+list="Alibbb Ariza adsfak AAda ADfds"
+#追加字符串
+list=$list" Connected"   
+for state in $list
+do
+    echo "Have you ever visited $state?"
+done
+
+IFS=$'\n'
+file="states"
+for state in $(cat $file)
+do
+    echo "visit beautiful $state"
+done

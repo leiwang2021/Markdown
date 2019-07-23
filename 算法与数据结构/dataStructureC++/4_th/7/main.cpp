@@ -23,6 +23,7 @@ HuffmanTree NewHuffmanNode()
 {
     HuffmanTree BST=(HuffmanTree)malloc(sizeof(HTNode));
     BST->weight=0;
+    BST->ch='0';
     BST->lchild=BST->rchild=NULL;
     return BST; 
 }
@@ -33,6 +34,8 @@ void PreOrderTraverse(HuffmanTree BST)
     if(BST)
     {
         cout<<BST->weight<<" ";
+		if( (BST->lchild == NULL) && (BST->rchild == NULL)){
+        cout<<BST->ch<<" ";}
         PreOrderTraverse(BST->lchild);
         PreOrderTraverse(BST->rchild);
     }
@@ -159,7 +162,7 @@ HuffmanTree Huffman(MinHeap H)
     for(i=1;i<N;i++)   //N-1次合并
     {
         T=NewHuffmanNode();
-        T->lchild=Delete(H);
+        T->lchild=Delete(H);   //注意此处从最小堆中删除元素的过程，顺序不一样，构建的哈夫曼树的形状也不一样
         T->rchild=Delete(H);
         T->weight=T->lchild->weight+T->rchild->weight;
         Insert(H,T);
@@ -174,11 +177,11 @@ HuffmanTree Huffman(MinHeap H)
 /************递归进行哈夫曼编码*************/
 void HuffmanCode(HuffmanTree BST,int depth)  //depth为目前编码到哈夫曼树的深度（层次） 
 {
-	static int code[10];  //编码空间 
+	static int code[10];  //编码空间,静态存储，在整个程序执行期间都存在 
 	
 	if( BST ){
 		if( (BST->lchild == NULL) && (BST->rchild == NULL)){  //找到了叶结点
-            cout<<BST->ch<<" "<<BST->weight<<endl;
+            cout<<BST->ch<<" "<<BST->weight<<" ";
 			for(int i=0; i<depth; i++){
                 cout<<code[i]<<" ";
 			}
@@ -243,11 +246,11 @@ int main()
 	}
 	char string[100]; 
     cout<<"请输入叶子结点代表的字符"<<endl;
-    cin>>string;
+    cin.get();   //需加上cin.get(),去除缓冲区中的换行符
+    cin.getline(string,N+1);   //cin.getline()可丢弃换行符，但此输入中间不能有空格
 	for(i=1; i<=h->Size; i++){/*最小堆元素赋值*/ 
 		h->data[i]->ch= string[i-1];
 	}
-	
 	BT = Huffman(h);  //构造哈夫曼树 
 	printf("先序遍历此哈夫曼树的权值:\n"); 
 	PreOrderTraverse(BT);  //先序遍历此哈夫曼树 
@@ -256,9 +259,10 @@ int main()
 	HuffmanCode(BT,0);
     cout<<"请输入需要解码的二进制编码序列: "<<endl;
 	char ch[100];
-    cin>>ch;
+    cin.getline(ch,100);//getline
     cout<<"解码结果为: "<<endl;
 	HuffmanDecode(ch,BT); 
+    cout<<endl;
 	
 	return 0;
  } 

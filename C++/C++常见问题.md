@@ -19,4 +19,6 @@
 
 -  swap(S[left],S[right]);　　　swap函数可用于交换两个vector位置的元素
 -  Segmentation fault (core dumped),访问一些空的，可能会出现该问题
+- 当有多个cin输入时，注意要不要加上cin.get()去掉缓冲区中的换行符
+- cin.getline()用于读取字符串时，输入时中间不能有空格
        
