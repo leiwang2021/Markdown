@@ -79,5 +79,35 @@
   b[:123]不会报错，索引全部的值
   ```
 
-  
+- gc.collect
+
+  - 清理内存
+
+- set_index
+
+  - set_index( ) 将 DataFrame 中的列转化为行索引。  
+  - 可以变成层级索引，即花括号结构
+
+- stack和unstack是python进行层次化索引的重要操作。层次化索引就是对索引进行层次化分类，便于使用，这里的索引可以是行索引，也可以是列索引。常见的数据的层次化结构有两种，一种是表格，一种是“花括号”
+
+  - stack: 将数据从”表格结构“变成”花括号结构“，即将其列索引变成行索引。
+
+  - unstack: 数据从”花括号结构“变成”表格结构“，即要将其中一层的行索引变成列索引。如果是多层索引，则以上函数是针对内层索引（这里是store）。利用level可以选择具体哪层索引。
+
+    ```python
+    import numpy as np
+    import pandas as pd
+    from pandas import Series,DataFrame
+    data=DataFrame(np.arange(12).reshape((3,4)),index=pd.Index(['street1','street2','street3']),
+                   columns=pd.Index(['store1','store2','store3','store4']))
+    print(data)
+    print('-----------------------------------------\n')
+    data2=data.stack()
+    data3=data2.unstack()
+    print(data2)
+    print('-----------------------------------------\n')
+    print(data3)
+    ```
+
+    
 
