@@ -17,8 +17,39 @@
 
 - gdb的调试
 
--  swap(S[left],S[right]);　　　swap函数可用于交换两个vector位置的元素
--  Segmentation fault (core dumped),访问一些空的，可能会出现该问题
+- swap(S[left],S[right]);　　　swap函数可用于交换两个vector位置的元素
+
+- Segmentation fault (core dumped),访问一些空的，可能会出现该问题
+
 - 当有多个cin输入时，注意要不要加上cin.get()去掉缓冲区中的换行符
+
 - cin.getline()用于读取字符串时，输入时中间不能有空格
-       
+
+- 将一个string(key.c_str())直接赋值给一个string报错，什么原因????     
+
+   ```
+       string data;
+        string data2="sdfsdf";
+        data=string(data2.c_str());
+        cout<<data;
+   //这种方式不出错
+   ```
+
+   ```
+        List NewCell;
+        NewCell=(List)malloc(sizeof(LNode));
+        //NewCell->data=word;  //不会报错
+        string temp;
+        temp=string(word.c_str());
+        NewCell->data=temp;       //这种方式不会出错，这种不是临时变量
+        //NewCell->data=string(word.c_str());//出错　什么原因?  函数中创建的对象被析构的原因?
+        //NewCell->data="sdfsfsd";   //不会报错
+        //cout<<NewCell->data;
+       // cout<<&(string(word.c_str()));  //临时变量，报错
+   
+   
+   //会报Segmentation fault (core dumped),错误
+   //临时变量的问题????????????
+   ```
+
+   

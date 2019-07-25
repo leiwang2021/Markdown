@@ -167,14 +167,18 @@ Tensor("embedding_lookup_1:0", shape=(2, 4, 3), dtype=float64)
     # False True
     ```
 
-  
+- 查看tensorflow中间过程的变量值
 
-  
+  - ```
+    item_embeddings = self.item_embeddings.eval()
+    ```
 
-  
+  - 即可查看
+-　tf.gather：用一个一维的索引数组，将张量中对应索引的向量提取出来
 
-  
 
-  
 
-  
+
+
+
+
