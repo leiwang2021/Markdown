@@ -1215,5 +1215,90 @@ for var_name in optimizer.state_dict():
 ​        loss(*x*,*c**l**a**s**s*)=−log(∑*j*exp(*x*[*j*])exp(*x*[*c**l**a**s**s*]))=−*x*[*c**l**a**s**s*]+log(*j*∑exp(*x*[*j*]))
 
 - torch.save()
+
 - torch.load()  可加载存储的模型
+
 - 注意Tensor与非Tensor之间的运算，应先使用item()获得数据后再与非Tensor运算
+
+- cudnn.benchmark
+
+  - 设置这个 flag 可以让内置的 cuDNN 的 auto-tuner 自动寻找最适合当前配置的高效算法，来达到优化运行效率的问题。
+
+- ```
+  self.source_encoder_conv = nn.Sequential()
+  self.source_encoder_conv.add_module('conv_pse1', nn.Conv2d(in_channels=3, out_channels=32, kernel_size=5,padding=2))
+  self.source_encoder_conv.add_module('ac_pse1', nn.ReLU(True))
+  self.source_encoder_conv.add_module('pool_pse1', nn.MaxPool2d(kernel_size=2, stride=2))
+  ```
+
+- nn.Sequential
+
+  - A sequential container. Modules will be added to it in the order they are passed in the constructor. Alternatively, an ordered dict of modules can also be passed in
+
+- from torch.autograd import Function
+
+  - 虽然pytorch可以自动求导，但是有时候一些操作是不可导的，这时候你需要自定义求导方式。也就是所谓的 “Extending torch.autograd”. 
+
+  - 扩展torch.autograd.Function
+
+  - ```python
+    import torch.autograd.Function as Function
+    class LinearFunction(Function):
+    　  # 创建torch.autograd.Function类的一个子类
+        # 必须是staticmethod
+        @staticmethod
+        # 第一个是ctx，第二个是input，其他是可选参数。
+        # ctx在这里类似self，ctx的属性可以在backward中调用。
+        # 自己定义的Function中的forward()方法，所有的Variable参数将会转成tensor！因此这里的input也是tensor．在传入forward前，autograd engine会自动将Variable unpack成Tensor。
+        def forward(ctx, input, weight, bias=None):
+            print(type(input))
+            ctx.save_for_backward(input, weight, bias) # 将Tensor转变为Variable保存到ctx中
+            output = input.mm(weight.t())  # torch.t()方法，对2D tensor进行转置
+            if bias is not None:
+                output += bias.unsqueeze(0).expand_as(output)　＃unsqueeze(0) 扩展处第0维
+                # expand_as(tensor)等价于expand(tensor.size()), 将原tensor按照新的size进行扩展
+            return output
+    
+        @staticmethod
+        def backward(ctx, grad_output): 
+            # grad_output为反向传播上一级计算得到的梯度值
+            input, weight, bias = ctx.saved_variables
+            grad_input = grad_weight = grad_bias = None
+            # 分别代表输入,权值,偏置三者的梯度
+            # 判断三者对应的Variable是否需要进行反向求导计算梯度
+            if ctx.needs_input_grad[0]:
+                grad_input = grad_output.mm(weight) # 复合函数求导，链式法则
+            if ctx.needs_input_grad[1]:
+                grad_weight = grad_output.t().mm(input)　# 复合函数求导，链式法则
+            if bias is not None and ctx.needs_input_grad[2]:
+                grad_bias = grad_output.sum(0).squeeze(0)
+    
+            return grad_input, grad_weight, grad_bias
+    
+    #建议把新操作封装在一个函数中
+    def linear(input, weight, bias=None):
+        # First braces create a Function object. Any arguments given here
+        # will be passed to __init__. Second braces will invoke the __call__
+        # operator, that will then use forward() to compute the result and
+        # return it.
+        return LinearFunction()(input, weight, bias)#调用forward()
+    
+    # 或者使用apply方法对自己定义的方法取个别名
+    linear = LinearFunction.apply
+    
+    #检查实现的backward()是否正确
+    from torch.autograd import gradcheck
+    # gradchek takes a tuple of tensor as input, check if your gradient
+    # evaluated with these tensors are close enough to numerical
+    # approximations and returns True if they all verify this condition.
+    input = (Variable(torch.randn(20,20).double(), requires_grad=True),)
+    test = gradcheck(LinearFunction(), input, eps=1e-6, atol=1e-4)
+    print(test)  #　没问题的话输出True
+    ```
+
+  - apply
+
+    - **apply** *(function, args[, kwargs])*
+    - Required. The function argument must be a callable object (a user-defined or built-in function or method, or a class object).
+
+    
