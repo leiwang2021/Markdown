@@ -46,10 +46,15 @@ ALGraph<T>::ALGraph(T a[],int n,int e)
         int i,j;
         cout<<"请输入边的两个结点: "<<endl;
         cin>>i>>j;
-        ArcNode *s=new ArcNode;
+        //无向图不仅要为<i,j>插入结点，还要为<j,i>插入结点
+        ArcNode *s=new ArcNode;   //new的要在析构函数中释放结点
         s->adjvex=j;
         s->Next=adjlist[i].firstedge;
         adjlist[i].firstedge=s;
+        ArcNode *t=new ArcNode;
+        t->adjvex=i;
+        t->Next=adjlist[j].firstedge;
+        adjlist[j].firstedge=t;
     }
 }
 
@@ -98,10 +103,11 @@ inline void ALGraph<T>::BFSTraverse(int v)
 
 int main()
 {
-    int array[]={1,2,3,4,5,6};
+    int array[]={0,1,2,3,4,5};
     ALGraph<int> graph(array,6,9);
     cout<<"BFS: "<<endl;
     graph.BFSTraverse(3);
+    cout<<endl;
     cout<<"DFS: "<<endl;
     graph.DFSTraverse(3);
     return 0;

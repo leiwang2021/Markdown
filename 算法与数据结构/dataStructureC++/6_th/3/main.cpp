@@ -1,4 +1,5 @@
 //图的存储结构实现
+#include<map>
 #include<iostream>
 #include<queue>
 
@@ -99,10 +100,11 @@ inline void MGraph<T>::BFSTraverse(int v)
 
 int main()
 {
-    int array[]={1,2,3,4,5,6};
-    MGraph<int> graph(array,6,9);
+    int array[]={0,1,2,3,4,5,6};  //顶点必须按标号0,1,2...标号
+    MGraph<int> graph(array,7,10);
     cout<<"BFS: "<<endl;
     graph.BFSTraverse(0);
+    cout<<endl;
     cout<<"DFS: "<<endl;
     graph.DFSTraverse(0);
     return 0;
