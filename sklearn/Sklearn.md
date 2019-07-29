@@ -49,4 +49,8 @@
   - fit_transform(self, y)  Fit label encoder and return encoded labels
   - transform(self, y)   Transform labels to normalized encoding
 
+- MinMaxScaler
+
+  - 归一化
+
   

@@ -174,7 +174,24 @@ Tensor("embedding_lookup_1:0", shape=(2, 4, 3), dtype=float64)
     ```
 
   - 即可查看
--　tf.gather：用一个一维的索引数组，将张量中对应索引的向量提取出来
+
+- tf.gather：用一个一维的索引数组，将张量中对应索引的向量提取出来
+
+- 注意tensorflow的版本与cudn和cudnn的版本对应问题
+  - cat /usr/local/cuda/version.txt查看cuda版本
+  - cat /usr/local/cuda/include/cudnn.h | grep CUDNN_MAJOR -A 2　查看cudnn版本
+
+- Keras中构建 模型有两种方式，一种是通过Model类构建，一种是通过Sequential构建。前者类似对数据的pipline处理，后者侧重于模型的堆叠。
+
+  - Model 类提供了数据特征处理和模型训练的一些操作。在keras中构建model有两种方式，直接构建和通过定义一个子类构建。
+
+- eval
+
+  - 可以使用sess.run()在同一步获取多个tensor中的值，使用Tensor.eval()时只能在同一步当中获取一个tensor值，并且每次使用 eval 和 run时，都会执行整个计算图
+
+- tf.train.Saver()
+
+  - 可用来保存模型
 
 
 
