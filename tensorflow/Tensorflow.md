@@ -193,7 +193,31 @@ Tensor("embedding_lookup_1:0", shape=(2, 4, 3), dtype=float64)
 
   - 可用来保存模型
 
+  - ```python
+    saver.save(self.sess, '../model/Dnn.ckpt')
+    ```
 
+  - 加载模型
+
+    ```python
+    with tf.Session() as sess:
+        #tf.train.import_meta_graph函数给出model.ckpt-n.meta的路径后会加载图结构，并返回saver对象
+        saver = tf.train.import_meta_graph('../model/Dnn.ckpt.meta')
+        saver.restore(sess,tf.train.latest_checkpoint("../model/"))
+        graph = tf.get_default_graph()
+        feat_user = graph.get_tensor_by_name("feat_user:0")
+        feat_item = graph.get_tensor_by_name("feat_item:0")
+        user_embeddings=graph.get_tensor_by_name("user_embeddings_2:0")
+        item_embeddings = graph.get_tensor_by_name("item_embeddings_2:0")
+        feed_dict={feat_user:user,feat_item:item}
+        user_embeddings,item_embeddings=sess.run([user_embeddings,item_embeddings],feed_dict)
+        score=tf.reduce_sum(tf.multiply(user_embeddings, item_embeddings),axis=1)
+        score=sess.run(score)
+    ```
+
+    
+
+ 
 
 
 
