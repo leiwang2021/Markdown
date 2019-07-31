@@ -1301,4 +1301,37 @@ for var_name in optimizer.state_dict():
     - **apply** *(function, args[, kwargs])*
     - Required. The function argument must be a callable object (a user-defined or built-in function or method, or a class object).
 
-    
+- torch.bmm
+
+  - 对存储在两个批batch1和batch2内的矩阵进行批矩阵乘操作
+
+  - ```
+    >>> batch1 = torch.randn(10, 3, 4)
+    >>> batch2 = torch.randn(10, 4, 5)
+    >>> res = torch.bmm(batch1, batch2)
+    >>> res.size()
+    torch.Size([10, 3, 5])
+    ```
+
+- torch.narrow
+
+  - torch.narrow(input, dimension, start, length) → Tensor
+
+  - ```
+    >>> x = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    >>> torch.narrow(x, 0, 0, 2)
+    tensor([[ 1,  2,  3],
+            [ 4,  5,  6]])
+    >>> torch.narrow(x, 1, 1, 2)
+    tensor([[ 2,  3],
+            [ 5,  6],
+            [ 8,  9]])
+    ```
+
+  - 
+
+  
+
+  
+
+   
