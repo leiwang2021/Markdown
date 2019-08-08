@@ -276,3 +276,16 @@ git remote add origin git@github.com:leiwang2021/learn.git
 - Git就会创建一个裸仓库，裸仓库没有工作区，因为服务器上的Git仓库纯粹是为了共享，所以不让用户直接登录到服务器上去改工作区，并且服务器上的Git仓库通常都以`.git`结尾。然后，把owner改为`git`     sudo chown -R git:git sample.git
 - 禁用shell登录 
 - 因为Git支持钩子（hook），所以，可以在服务器端编写一系列脚本来控制提交等操作，达到权限控制的目的。[Gitolite](https://github.com/sitaramc/gitolite)就是这个工具。 
+
+### 常见问题
+
+- ```
+  # 有时候需要突然修改 .gitignore 文件，随后要立即生效
+  git rm -r --cached .  #清除缓存  
+  git add . #重新trace file  
+  git commit -m "update .gitignore" #提交和注释  
+  git push origin master #可选，如果需要同步到remote上的话  
+  ```
+
+- rm -rf .git/  取消git初始化
+- 如果不慎commit 不恰当的文件，可以git reset --hard 版本号回退　　或者从远程仓库中git pull origin master

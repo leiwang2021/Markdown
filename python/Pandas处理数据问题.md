@@ -44,6 +44,14 @@
 
   这里agg接受的不一定是`np.mean`这些函数, 你还可以进行自定义函数哦
 
+  - apply
+
+    ```python
+    rank_result = rank_result.groupby(['buyer_admin_id'], as_index=False).apply(lambda x: x.sort_values('score', ascending=False))
+    b = a.groupby(['buyer_admin_id'], as_index=False).apply(lambda x: x[:30])
+    d=c.groupby(['buyer_admin_id'],as_index=False).apply(lambda x: x.item_id.values.tolist())
+    ```
+
   - 画图
 
     ```a
