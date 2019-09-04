@@ -1025,6 +1025,95 @@ esac
   - 遍历文件时
   - 指定多个IFS值　　IFS=$'\n':;""
 
+- 用通配符读取目录
+
+  - bash shell会将额外的单词当作参数，进而造成错误
+
+### 13.2 C语言风格的for 命令
+
+- C语言的for命令
+  - 变量赋值可以有空格
+  - 条件中的变量不以美元符开头
+  - 迭代过程中的算式未用expr命令格式
+- 使用多个变量
+
+### 13.3 while命令
+
+- 在test命令返回非零退出状态码时，while命令会停止执行那组命令
+
+  ```
+  while test command
+  do
+  	other command
+  done
+  ```
+
+- 使用多个测试命令，只有最后一个测试命令的退出状态码被用来决定什么时候结束循环
+
+### 13.4 until命令
+
+- 只有测试命令的退出状态码不为0，bash shell才会执行循环中列出的命令
+
+  ```
+  until test commands
+  do
+  	other commands
+  done
+  ```
+
+- 和while命令类似，只有最后一个命令的退出状态码决定
+
+### 13.5 嵌套循环
+
+### 13.6 循环处理文件数据
+
+```shell
+ #!/bin/bash
+ 
+ IFS.OLD=$IFS
+ IFS=$'\n'
+ for entry in $(cat /etc/passwd)
+ do
+     echo "Values in $entry -"
+     IFS=:
+     for value in $entry
+     do
+         echo "   $value"
+     done
+ done
+
+```
+
+### 13.7 控制循环
+
+- break和continue命令
+- break  n     n可指定要跳出的循环层级，默认为1
+- continue n   n定义了要继续的循环层级
+
+### 13.8 处理循环的输出
+
+- 对循环的输出使用管道或进行重定向，在done命令后添加一个处理命令实现
+
+### 13.9 实例
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
   
 
   

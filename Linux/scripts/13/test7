@@ -1,0 +1,14 @@
+#!/bin/bash
+
+for file in /home/leiwang/Markdown/Linux/* /home/leiwang/Markdown/test
+do
+    if [ -d "$file" ]
+    then 
+        echo "$file is a directory"
+    elif [ -f "$file" ]
+    then
+        echo "$file is a file"
+    else
+        echo "$file doesn't exits"
+    fi
+done
