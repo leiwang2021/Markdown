@@ -40,6 +40,64 @@
 - base class table的应用
 - virtual base class的原始模型是在class object中为每一个有关联的virtual base class 加上一个指针。其他演化出来的模型则要不是导入一个virtual base class table,就是扩展已存在的virtual table,以维护每一个virtual base class的位置.
 
+#### 对象模型如何影响程序
+
+- 代码会根据对象模型在内部有不同的转化结果
+
+### 1.2 关键词带来的差异
+
+#### 关键词的困扰
+
+- class与struct
+
+#### 策略性正确的struct
+
+- 把单一元素的数组放在一个struct的尾端，每个struct objects可以拥有可变大小的数组，class不一定能行
+
+- C++中处于同一个access section,必须保证以其声明顺序出现在内存布局中，然而被放置在多个access section中的各笔数据，排列顺序就不一定了
+
+  ```c++
+   struct mumble{
+       char pc[1];
+   };
+   
+   int main()
+   {
+       char const* string="Heelo";
+       struct mumble* pmumb1=(struct mumble*)malloc(sizeof(struct mumble)+strlen(string)+1);
+       strcpy(pmumb1->pc,string);
+       cout<<pmumb1->pc<<endl;
+       return 0;
+   }
+  ```
+
+- 同理，base class 和derived classes的data members的布局也未有谁先谁后的强制规定，不能保证前面的struct技巧有效
+
+- 组合，而非继承，才是把C和C++结合在一起的唯一可行方法(即struct和class)
+
+- C struct 在C++的一个合理用途:当你要传递一个复杂的class object的全部或部分到某个C函数中去时，struct可以将数据封装起来，并保证与C兼容的空间布局
+
+### 1.3 对象的差异
+
+- C++程序设计模型直接支持三种programming paradigms
+
+- procedural model:  同C一样
+
+- abstract data type model,ADT, 处理的是一个拥有固定而单一类型的实例，在编译时期就完全定义好了
+
+- object-oriented model ，处理一个未知实例，它的类型随便有所界定，却有无限可能
+
+  ```c++
+  //不确定类型
+  Librar_materials *px=retrieve();
+  Librar_materials &rx=*px;  //px或rx要么是Librar_materials类型，或其子类型
+  
+  //确定类型
+  Librar_materials dx= *px;　//dx只能是Librar_materials类型
+  ```
+
+- 多态只存在于一个个的public class体系中
+
 
 
 
