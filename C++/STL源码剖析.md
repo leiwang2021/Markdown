@@ -13,7 +13,7 @@
 - 容器
 - 算法
 - 迭代器：　泛型指针
-- 仿函数
+- 仿函数：一种重载了operator()的class或class template,一般函数指针可视为狭义的仿函数
 - 配接器(adapters)
 - 配置器
 
@@ -62,7 +62,69 @@
   - 组态11: __STLNON_TYPE_TMPL_PARAM_BUG
   - 组态:  __STL_NULL_TMPL_ARGS
   - 组态: __STL_TEMPLATE_NULL
+
 - 临时对象的产生与运用
+
+  - 任何pass by value操作都会引发copy操作，于是形成一个临时对象，造成效率上的负担
+  - 刻意制造临时对象的方法:  Shape(3) 在型别名称之后加一对小括号，并指定初值，STL常将此技巧用于仿函数与算法的搭配上
+
+- 静态常量整数成员在class内部直接初始化
+
+- increment/decrement/dereference操作符
+
+  - 迭代器的功能实现
+
+  - increment和decrement分为前置式和后置式两种　
+
+  - C++规定后缀形式有一个int类型参数，当函数被调用时，编译器传递一个0做为int参数的值给该函数　
+
+    ```c++
+    class UPInt { // "unlimited precision int"
+    public:
+    　UPInt& operator++(); // ++ 前缀
+    　const UPInt operator++(int); // ++ 后缀
+    　UPInt& operator--(); // -- 前缀
+    　const UPInt operator--(int); // -- 后缀
+    　UPInt& operator+=(int); // += 操作符，UPInts
+    　// 与ints 相运算
+    　...
+    };
+    
+    UPInt i;
+    
+    ++i; // 调用 i.operator++();
+    i++; // 调用 i.operator++(0);
+    --i; // 调用 i.operator--();
+    i--; // 调用 i.operator--(0);
+    ```
+
+    　
+
+  - dereference取值
+
+- 前闭后开区间表示法
+
+  - [first last)  实际范围从first开始　直到last-1
+
+- function call操作符
+
+  - 函数指针存在缺陷: 无法持有自己的状态，无法达到组件技术中的可适配性
+  - 仿函数：使用起来像函数一样的东西，对某个类class进行operator()重载
+
+
+
+## 第二章　空间配置器allocator
+
+### 2.1 空间配置器的标准接口
+
+- 设计一个简单的空间配置器
+
+  - size_t是一个unsigned类型的数值类型
+  - ptrdiff_t通常用来保存两个指针减法操作的结果　　通常为long int 类型
+
+  
+
+
 
 
 

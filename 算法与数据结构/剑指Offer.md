@@ -28,6 +28,30 @@
   - 哈希表的方法，时间复杂度O(n),空间复杂度O(n)
   - 交换位置的方法,时间复杂度O(n),空间复杂度O(1)
   - **题目二:不修改数组找出重复的数字**
-    - 二分查找解决，时间复杂度O(nlogn)
+    - 二分查找解决，时间复杂度O(nlogn),空间复杂度为O(1)
     - 构造一个辅助的数组解决,额外空间复杂度O(n)
+- **面试题4 二维数组中的查找**
+
+#### 字符串
+
+- C++把常量字符串放到单独一个内存区域，当几个指针赋值给相同的常量字符串时，它们实际上会指向相同的内存地址，但用常量内存初始化数组，情况会不同
+
+  ```c++
+  int main(){
+      char str1[]="hello world";
+      char str2[]="hello world";
+      
+      char* str3="hello world";
+      char* str4="hello world";
+      
+      if(str1==str2)
+        cout<<"The str1==str2"<<endl;
+      if(str3==str4)
+      	cout<<"Thr str3==str4"<<endl;
+      return 0;
+      }
+   //str1!=str2数组地址不同   str3==str4指向相同的内存
+  ```
+
+  
 

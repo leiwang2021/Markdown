@@ -157,7 +157,62 @@
     - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-04 15-15-46.png)
 
 - 在const和non-const成员函数中避免重复
+
   - 为了避免代码重复，即运用const operator[]  实现non-const版本，可使用casting
+
 - 将某些东西声明为const可帮助编译器侦探出错误用法，对象、函数参数、函数返回类型、成员函数本体
+
 - 编译器强制实施bitwise constness,但编写程序应使用概念上的常量性
+
 - 当const和non-const成员函数有实质等价的实现时，令non-const版本调用const版本可避免代码重复
+
+### 条款4　确定对象被使用前已先被初始化
+
+- 对于无成员的内置类型，手动初始化
+
+- 对于自定义类型，构造函数初始化
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-05 14-09-28.png)
+
+- 上述非内置成员的初始化发生于这些成员的default构造函数被调用之时，比进入ABEntry构造函数本体的时间更早，内置类型不一定
+
+- 构造函数的一个教佳写法是member initialization list替换赋值动作,效率更高
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-05 14-14-32.png)
+
+  
+
+- 总是在初值列中列出所有成员变量
+- 对于有多个构造函数的，内置类型的成员变量最好改用赋值操作，并移往某个函数，供所有构造函数调用
+- C++的成员初始化次序: base classes更早被初始化，class的成员变量以其声明次序被初始化
+
+- 不同编译单元内定义之non-local static对象的初始化次序
+
+  - 编译单元指产出单一目标文件的那些源码，即单一源码文件加上所含头文件
+
+  - 函数内的static对象为local static对象，其他static对象为non-local static 对象，static对象在main()结束时自动销毁
+
+  - 将每个non-local static对象搬到自己的专属函数内，对象被声明为static,函数返回一个reference指向它所含的对象，用户调用函数，而不直接用对象，即non-local static对象被local static对象代替了
+
+    ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-05 14-41-04.png)
+
+  - 任何一种non-const static对象无论在local或non-local，在多线程环境下等待某事发生都会有麻烦，解决办法是在程序的单线程启动阶段手工调用所有reference-returning函数
+
+- 为内置型对象进行手工初始化
+
+- 构造函数最好使用成员列表初始化，排序次序与声明次序应相同
+
+- 为避免跨编译单元初始化次序问题，以local static对象替换non-loca static对象
+
+## 第二章　构造/析构/赋值运算
+
+### 条款5 了解C++默默编写并调用哪些函数
+
+- 空类在编译器处理之后会自动生成构造函数,copy构造函数,析构函数,copy assignment操作符
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-05 14-51-36.png)
+
+- 它们都是public且inline的，这些函数被调用才会被编译器创建出来
+- 声明了构造函数后，编译器不再为它创建默认构造函数
+- 对于内含reference成员的class，必须自己定义copy assignment操作符
+- 对于内含const成员的classer,也必须自己定义，编译器将拒绝编译

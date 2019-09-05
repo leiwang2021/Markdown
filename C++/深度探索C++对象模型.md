@@ -98,7 +98,59 @@
 
 - 多态只存在于一个个的public class体系中
 
+- C++以下方法支持多态
 
+  - 经由一组隐式的转化操作，例如把一个derived class 指针转化为一个指向其public base type的指针
+
+    ```c++
+    shape *ps=new circle();
+    ```
+
+  - 经由virtual funtion机制
+
+    ```c++
+    ps->rotate()
+    ```
+
+  - 经由dynamic_cast和typeid运算符
+
+    ```c++
+    if(circle *pc=dynamic_cast<circle*>(ps))
+    ```
+
+  - 多态的主要功能是经由一个共同的接口来影响类型的封装，这个接口通常被定义在一个抽象的base class中，共享接口是以virtual funtion 机制引发的
+
+- 一个class object的内存大小
+
+  - 其nonstatic data members的总和大小
+  - 加上由于alignment的需要而填补上去的空间
+  - 为了支持virtual而由内部产生的任何额外负担，一个指针，不管指向哪一种数据类型，指针本身所需内存大小是固定的
+
+- 指针的类型
+
+  - 指向不同类型的各指针，是在其所寻址出来的object类型不同
+  - 一个指向地址1000的整数指针，在32位机器上，将涵盖地址空间1000-1003(整数是4 bytes)
+  - 一个类型为void* 的指针只能持有一个地址，不能通过它操作所指之object的缘故
+  - 转换(cast)其实是一种编译器指令，大部分情况下它不改变一个指针所含的真正地址，**它只影响"被指出之内存的大小和其内容"的解释方式**
+
+- 加上多态后
+
+  - 一个pointer或一个reference之所以支持多态，是因为它们并不引发内存中的任何与类型有关的内存委托操作，会受到改变的，只有它们所指向的内存的“大小和内容解释方式”而已
+
+  - 当一个base class object被直接初始化为一个derived class object时，derived object会被切割塞入较小的base type 内存中
+  - ADT程序风格，称为OB, 所有函数调用操作都在编译时期解析完成，对象构建起来不需要设置virtual 机制
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
 
 
 

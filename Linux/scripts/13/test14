@@ -1,0 +1,8 @@
+#!/bin/bash
+#文件输入重定向到while循环
+
+input="users.csv"
+while IFS=',' read -r userid name
+do
+    echo "adding $userid"
+done<"$input"
