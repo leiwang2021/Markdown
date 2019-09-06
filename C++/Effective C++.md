@@ -213,6 +213,35 @@
   ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-05 14-51-36.png)
 
 - 它们都是public且inline的，这些函数被调用才会被编译器创建出来
+
 - 声明了构造函数后，编译器不再为它创建默认构造函数
+
 - 对于内含reference成员的class，必须自己定义copy assignment操作符
+
 - 对于内含const成员的classer,也必须自己定义，编译器将拒绝编译
+
+
+
+### 条款6 若不想使用编译器自动生成的函数，明确拒绝
+
+- 不希望copy和copy assignment时，将成员函数声明为private且不实现它们　
+
+- 为驳回编译器自动提供的机能，可将相应的成员函数声明为private且不予实现，或者继承一个Uncopyable 的base class ,可将链接期间的错误移到编译期
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-06 14-41-04.png)
+
+  
+
+
+
+### 条款7 为多态基类声明virtual 析构函数
+
+- 当derived class对象经由一个base class指针被删除，而该base class 带着一个non-virtual析构函数，其结果未定义-实际执行的通常是对象的derived成分没被销毁，形参资源泄露问题
+- 如果class 不含virtual 函数，通常表示它不意图被用作一个base class
+- 每一个virtual函数的class都有一个相应的vtbl,当对象调用某一virtual函数，实际被调用的函数取决于该对象的vptr所指的vtbl
+- 若class内含virtual函数，其对象的体积会增加，即多了一个vptr指针，32位机器中4个字节，64位机器中8个字节
+- pure virtual 函数导致抽象classes,  为抽象基类定义pure virtual 析构函数
+- 对于并非被设计用来经由base class接口处置derived class对象的，不需要virtual 析构函数
+- 总结
+  - 带多态性质的base classes应声明一个virtual 析构函数，如果class带有任何virtual函数，应拥有一个virtual析构函数
+  - classes如果不是作为base classes使用，或不是为了具备多态性，就不应该声明virtual析构函数

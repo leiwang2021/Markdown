@@ -136,11 +136,71 @@
 - 加上多态后
 
   - 一个pointer或一个reference之所以支持多态，是因为它们并不引发内存中的任何与类型有关的内存委托操作，会受到改变的，只有它们所指向的内存的“大小和内容解释方式”而已
-
   - 当一个base class object被直接初始化为一个derived class object时，derived object会被切割塞入较小的base type 内存中
   - ADT程序风格，称为OB, 所有函数调用操作都在编译时期解析完成，对象构建起来不需要设置virtual 机制
 
-  
+## 第二章　构造函数语意学
+
+- conversion运算符的引入
+
+### 2.1 Default Constructor 的构造操作
+
+- 当编译器需要它的时候会合成出一个defailt constructor
+
+- 带有Default Constructor 的Member class object
+
+  - 当一个class没有任何constructor,但内含一个member object,而后者有default constructor，那么这个class的implicit default constructor 就是有用的
+
+  - 编译器避免合成多个default constructor:把合成的构造器都以inline方式完成，一个inline有静态链接，不会被文件以外看到，若太复杂，则合成一个explictit non-inline static实例
+
+    ```c++
+    class FOO{
+        public: 
+        FOO();
+        FOO(int);
+        ..
+    };
+    class Bar{
+        public:
+        FOO foo;
+        char* str;
+    };
+    
+    Bar bar; //Bar::foo在此初始化
+    //合成的默认构造器的函数如下:
+    inline Bar::Bar(){
+        foo.FOO::FOO()  //调用FOO的构造器
+    }
+    ```
+
+    - 如果class A内含一个或以上的member class objects,那么class A的每一个构造器否必须调用member classes的默认构造器，编译器会扩张已存在的构造器，这些代码安排在explicit user code之前
+
+- 带有Default Constructor的Base class
+
+- 带有一个Virtual Funtion的Class
+
+  - 合成出default constructor,为每一个class object的vptr设定初值，放置适当的virtual table地址
+    - class声明(或继承)一个虚函数
+    - class派生自一个继承串链，其中有一个或更多的virtual base classes
+    - 对于virtual函数，具体调用哪个版本的函数取决于指针所指向对象类型。
+    - 对于非virtual函数，具体调用哪个版本的函数取决于指针本身的类型，而和指针所指对象类型无关。
+    - const 修饰的参数引用的对象，只能访问该对象的const函数，因为调用其他函数有可能会修改该对象的成员，编译器为了避免该类事情发生，会认为调用非const函数是错误的。
+
+- 带有一个virtual base class的class
+
+  - virtual base class的实现法在不同的编译器之间有极大的差异
+  - cfront的做法是靠在derived class object的每一个virtual base classes中安插一个指针完成
+
+- 总结
+
+  - 4种情况下，编译器会为未声明constructor的classes合成一个default constructor
+    - 调用member object
+    - base class的默认构造器
+    - 为每一个object初始化其virtual funtion机制
+    - virtual base class 机制
+  - 其他情况下不会合成出来，在合成的默认构造器中，只有base class subobjects和member class objects会被初始化，所有其他的nonstatic data member都不会被初始化
+
+### 2.2 Copy Constructor的构造操作
 
   
 
