@@ -202,6 +202,86 @@
 
 ### 2.2 Copy Constructor的构造操作
 
+- 三种情况下，会将一个object的内容作为另一个class object的初值
+
+  - 显示地以一个object的内容作为另一个class object的内容
+  - 隐式地初始化操作，作为函数的参数传递
+  - 当函数传回一个class object时
+
+- Bitwise Copy Semantics(位依次拷贝)
+
+  - 当class object以相同class的另一个object为初值，内部是以default memberwise initialization手法完成的，即把每一个内建的或派生的data member的值，拷贝，不会拷贝member class object,以递归的方式施行memberwise initializaton
+
+  - 展现出bitwise copy semanticas时，不会合成一个default copy constructor
+
+    ```c++
+    class Word{
+        public:
+        Word(const char*);
+        ~Word(){delete [] str}
+        private:
+        	int cnt;
+        	char* str;
+    };
+    //str会出问题，必须由设计者实现一个explicit copy constructor以改写default memberwise initialization
+    ```
+
+  - 编译器必须合成一个copy constructor.以便调用member class object的copy constructor
+
+    ```c++
+    class String{
+        public:
+        String(const char*);
+        String(const String&);
+        ~String();
+    };
+    class Word{
+        public:
+        Word(const String&);
+        ~Word();
+        private:
+        int cnt;
+        String str;
+    };
+    //String声明了一个explicit copy constructor,编译器必须合成一个copy constructor.以便调用member class object的copy constructor
+    inline Word::Word(const Word& wd){
+        str.String::String(wd.str);
+        cnt=wd.cnt;
+    }  //合成出来的
+    ```
+
+- 不展现出bitwise copy semantics的4种情况
+
+  - 当class内含一个member object,而后者的class声明了一个copy constructor时(不论是被显示地声明，还是被编译器合成的)
+  - 当class继承自一个base class，而后者存在一个copy constructor时(不论是被显示地声明还是被合成)
+  - 当class声明了一个或多个virtual funtion时
+  - 当class派生自一个继承串链，其中有一个或多个virtual base classes时
+
+- 重新设定Virtual Table的指针
+
+  - 当class有virtual函数时，编译器导入一个vptr到class之中时，该class就不再展现bitwise semantics了，编译器需要合成一个copy constructor以求将vptr适当地初始化
+  - 当一个base class object以其derived class的object内容做初始化操作时，其vptr复制操作也必须保证安全
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-07 10-31-07.png)
+
+   
+
+- 处理virtual base class subobject
+
+  - 一个virtual base class的存在会使bitwise copy semantics 无效
+
+  - 编译器必须显示地将virtual base class pointer初始化
+
+  - 在多重继承(multiple inheritance)中, 可能出现多个基类继承自同一个基类, 即"菱形继承", 会导致最顶层的基类, 被复制多次;
+
+    可以采用虚继承(virtual inheritance)的方式, 使派生类(derived class)只保留最顶层基类的一个副本.
+
+    virtual, 即需要vptr(virtual table pointer), 即虚表指针, 额外占用4个字节;
+    
+
+  
+
+  
+
   
 
   

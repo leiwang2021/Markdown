@@ -245,3 +245,70 @@
 - 总结
   - 带多态性质的base classes应声明一个virtual 析构函数，如果class带有任何virtual函数，应拥有一个virtual析构函数
   - classes如果不是作为base classes使用，或不是为了具备多态性，就不应该声明virtual析构函数
+
+### 条款8　别让异常逃离析构函数
+
+- 析构函数吐出异常就是危险，总会带来过早结束程序、或发生不明确行为的风险
+- 析构函数绝对不要吐出异常，如果一个析构函数调用的函数可能抛出异常，析构函数应该捕捉任何异常，然后吞下它们(不传播)或结束程序
+- 如果客户需要对某个操作函数运行期间抛出的异常做出反应，那么class应该提供一个普通函数(而非在析构函数中)执行该操作
+
+### 条款9 绝不在构造和析构过程中调用virtual函数
+
+- 当pure virtual函数被调用，大多执行系统会终止程序(通常对结果发出一个信息)
+
+- 在构造和析构期间不要调用virtual函数，因为这类调用从不下降至derived class
+
+- derived class对象内的base class成分会在derived class自身成分被构造之前先构造妥当
+
+- 正确使用方式如下
+
+  ```c++
+  class Transcation{
+      public:
+      explicit Transcation(const std::string& logInfo);
+      void logTranscation(const std::string& logInfo) const;
+  };
+  Transcation::Transcation(const std::string& logInfo){
+      logTranscation(logInfo);
+  }
+  class BuyTranscation: public Transcation{
+      public:
+      BuyTranscation(parameters):Transcation(createLogString(parameters))
+      {}
+      private:
+      static std::string createLogString(parameters);
+      //令此函数为static,则不可能意外指向初期未成熟的BuyTranscation对象内尚未初始化的成员变量
+  };
+  ```
+
+
+
+### 条款10 令operator=返回一个reference to*this
+
+- 赋值采用右结合律
+  - x=y=z=15    x=(y=(z=15))
+- 为了实现连锁赋值，赋值操作符必须返回一个reference指向操作符的左侧实参
+
+
+
+### 条款11 在operator=中处理自我赋值
+
+- 加上　if(this==&rhs) return *this    //具备自我赋值安全性，但可能不具备异常安全性
+
+- 异常安全性
+
+  ```c++
+  Widget& Widget::operator=(const Widget& rhs){
+      Bitmap* pOrig=pb;
+      pb=new Bitmap(*rhs.pb);
+      delete pOrig;
+      return *this;
+  }
+  ```
+
+  - copy and swap技术
+
+
+
+
+

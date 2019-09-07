@@ -202,4 +202,46 @@
 
 - 第一级配置器__malloc_alloc_template剖析
 
+  - new handler机制，就是可以要求系统在内存配置需求无法被满足时，调用一个由用户指定的函数。具体说来，一旦::operator new 无法完成任务，在抛出std::bad_alloc异常状态之前，会先调用由用户指定的处理程序，该处理程序就是 new-handler
+  - SGI以malloc而非::operator new来配置内存，SGI不能直接使用C++的set_new_handler(),必须仿真一个类似的set_malloc_handler()
+  - ​       realloc(void *ptr,size_t size);realloc是在已经分配好内存块的重新分配，如果开始指针分配为NULL，则和malloc用法一致，否则如果开始内存块小，保存原内存块，再次基础新增，如果是开始内存块大，则在此基础减去尾部内存块。返回值是分配好内存块的头指针。
 
+  - malloc(zise_t size);malloc是对没有分配过内存块的直接进行分配，返回值是分配好内存块的返回值是分配好内存块的头指针。通过malloc分配好的内存块一般要用free(size_t size)来释放内存块。
+  - 通过realloc和malloc来申请的内存块是返回的指针是无符号类型的，所以在返回后程序员可以定义为任意类型的指针
+
+- 第二级配置器　__default_alloc_template剖析
+
+  - 每次配置一大块内存，并维护对应之自由链表，下次若再有相同大小的内存需求，直接从fre-list中拨出，若客端释还小额区块，则由配置器回收到free-list中
+
+  - free-list的实现
+
+    ```c++
+    union obj{
+        union obj* free_list_link;
+        char client_data[1];
+    };
+    ```
+
+  - 空间配置器函数allocate()
+
+    - 首先判断区块大小，大于128bytes就调用第一级配置器，小于就检查对应的free list,如果free list内有可用的区域，就直接使用，否则将区块大小上调到8的倍数边界，调用refill(),准备为free list重新填充空间
+
+  - 空间释放函数deallocate()
+
+    - 大于128bytes就调用第一级配置器，小于则找出对应的free list，将区块回收
+
+  - 重新填充free lists
+
+    - 为free list重新填充空间，新的空间将取自内存池
+
+  - 内存池
+
+    - 从内存池中取空间给free list使用，是chunk_alloc()的工作
+
+### 2.3 内存基本处理工具
+
+  
+
+  
+
+​    
