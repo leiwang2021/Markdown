@@ -240,8 +240,41 @@
 
 ### 2.3 内存基本处理工具
 
-  
+- memset函数及其用法
+  - void *memset(void *s, int c, unsigned long n);
+  - #include <string.h>
+  - 函数的功能是：将指针变量 s 所指向的前 n 字节的内存单元用一个“整数” c 替换，注意 c 是 int 型。s 是 void* 型的指针变量，所以它可以为任何类型的数据进行初始化。
+  - memset() 的作用是在一段内存块中填充某个给定的值。因为它只能填充一个值，所以该函数的初始化为原始初始化，无法将变量初始化为程序中需要的数据。用memset初始化完后，后面程序中再向该内存空间中存放需要的数据。
+  - memset 一般使用“0”初始化内存单元，而且通常是给数组或结构体进行初始化。
+- memcpy函数
+  - void *memcpy(void *dest, const void *src, size_t n);
+  - 从src的开始位置拷贝n个字节的数据到dest。如果dest存在数据，将会被覆盖。memcpy函数的返回值是dest的指针。memcpy函数定义在string.h头文件里。
+- memmove函数
+  - void *memmove( void* dest, const void* src, size_tcount );
+  - 由src所指内存区域复制count个字节到dest所指内存区域。
+  - memcpy只是简单的将两块内存区域当作没有关系的相互独立内存区域进行内存的拷贝，而memmove则考虑了当两块内存区域有重叠时所采用不同方向的拷贝模式进行处理。
+  - memcpy()函数是从前往后拷贝；假入出现内存重叠的现象；拷贝结果可能出错； memmove()函数在memcpy()函数的基础上加入了对内存重叠拷贝的处理；引入了倒序拷贝的方式处理内存重叠的某些情况；保证拷贝的正确性；
+- uninitializaed_copy
 
-  
+  - 能够将内存的配置与对象的构造行为分离开来
+- uninitialized_fill 
+  - 也能能够将内存的配置与对象的构造行为分离开来
+- uninitialized_fill_n
+  - 为指定范围内的元素设定相同的值
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-09 14-00-16.png)
 
-​    
+- POD指Plain Old Data,即标量型别或传统的C struct 型别，POD型别必然拥有trivial ctor/dtor/copy/assignment函数，对POD型别采用最有效的初值填写手法，对non-POD型别采取最保险安全的做法
+
+
+
+## 第三章　迭代器概念与traits编程技法
+
+- iterator模式定义：提供一种方法，使之能够依序巡防某个聚合物(容器)所含的各个元素，而又无需暴露该聚合物的内部表述方式
+
+### 3.1 迭代器设计思维
+
+- STL的中心思想:将数据容器和算法分开，彼此独立设计，最后再以一贴胶着剂(迭代器)将它们撮合在一起
+
+### 3.2 迭代器是一种smart pointer
+
+- 迭代器是一种行为类似指针的对象

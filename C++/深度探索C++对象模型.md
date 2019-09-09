@@ -276,7 +276,75 @@
     可以采用虚继承(virtual inheritance)的方式, 使派生类(derived class)只保留最顶层基类的一个副本.
 
     virtual, 即需要vptr(virtual table pointer), 即虚表指针, 额外占用4个字节;
-    
+
+
+
+
+### 2.3 程序转化语意学
+
+- 显示的初始化操作
+
+  ```c++
+  X x0;
+  void foo(){
+      X x1(x0);
+      X x2=x0;
+      X x3=X(x0);
+  }
+  //转化为以下形式，定义被重写，copy constrctuor调用操作被安插
+  void foo(){
+      //定义被重写，初始化操作被剥离
+      X x1;
+      X x2;
+      X x3;
+      
+      x1.X::X(x0);
+      x2.X::X(x0);
+      x3.X::X(x0);
+      
+  }
+  ```
+
+- 参数的初始化
+
+  ```c++
+  void foo(X x0);
+  X xx;
+  foo(xx)  //会导入临时性object,并调用copy constructor将它初始化，并将临时性对象交给函数
+  ```
+
+- 返回值的初始化
+
+  ```c++
+  X bar(){
+      X xx;
+      return xx;
+  }
+  //返回值如何从局部对象xx中拷贝过来?
+  //双阶段转化，如下:
+  void bar(X& _result){
+      X xx;
+      xx.X::X();
+      _result.X::X(xx);
+      return;
+  }
+  ```
+
+- 在使用者层面做优化
+
+- 在编译器层面做优化
+
+  - NRV优化
+
+- Copy Constructor要还是不要
+
+  - memcpy()和memset()只有在classes不含任何由编译器产生的内部members时才能有效运行
+
+- copy constructor的应用，迫使编译器对程序代码做部分优化，尤其是当一个函数以值的方式传回一个class object，而该class有一个copy constructor时，这将导致程序的转化
+
+
+
+### 2.4 成员们的初始化队伍
 
   
 
