@@ -346,17 +346,46 @@
 
 ### 2.4 成员们的初始化队伍
 
-  
+- member initialization list
+  - list中的初始化顺序是由class中的members声明顺序决定的　
+  - initialization list的项目被放在explicit user code之前
+  - base class和virtual base class在member initialization list中的初始化程序
+  - 编译器会对initialization list一一处理并可能重新排序，以反映出members的声明顺序，它会安插一些代码到constructor体内，并置于explicit user code之前
+
+
+
+## 第三章　Data语意学
+
+- class X{  };  sizeof X的结果为1,有一个隐藏的1字节大小，被编译器安插进去的一个char,使得这个class的两个object得以在内存中配置独一无二的大小
+
+- ```c++
+  class X{};       //1　　1
+  class Y: public virtual X {};   //８  4 
+  class Z: public virtual X {};   //８  4
+  class A: public Y,public Z {};  //12  8
+  ```
+
+- Y和Z的大小受到三个因素的影响
+
+  - virtual base class导致的某种形式的指针
+  - empty class 导致的1bytes
+  - Alignment的限制,　将数值调到某数的整数倍
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-10 14-01-51.png)  
+
+- 另一种编译器的处理
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-10 14-05-10.png)  
 
   
 
-  
+- 一个virtual base class subobject只会在derived class中存在一份实例，不管它在class继承体系中出现了多少次
+- static data members永远只存在一份实例，甚至该class没有任何object实例，其static data members也已存在，但是template class的static data members不同
+- class object大小的原因
+  - 由编译器自动加上的额外的data members,用以支持某些语言特性
+  - 因为alignment(边界调整)的需要
 
-  
 
-  
-
-  
 
   
 

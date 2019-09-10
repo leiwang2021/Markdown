@@ -278,3 +278,80 @@
 ### 3.2 迭代器是一种smart pointer
 
 - 迭代器是一种行为类似指针的对象
+- 迭代器最重要的工作是对operator* 和operator->进行重载
+- auto_ptr的源代码在头文件<memory>中
+- 每一种STL容器都提供有专属迭代器
+
+### 3.3 迭代器相应型别
+
+- 利用function template的参数推导机制
+
+### 3.4 Traits编程技法-STL源代码门钥
+
+- 迭代器所指对象的型别，称为该迭代器的value type
+
+- 对于用于模板定义的依赖于模板参数的名称，只有在实例化的参数中存在这个类型名，或者这个名称前使用了`typename`关键字来修饰，编译器才会将该名称当成是类型。除了以上这两种情况，绝不会被当成是类型。
+
+  因此，如果你想直接告诉编译器`T::iterator`是类型而不是变量，只需用`typename`修饰：
+
+- template partial specialization
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-10 15-10-23.png)
+
+- 最常用的迭代器相应型别有五种: value type, difference type, pointer, reference,iterator catagoly
+
+  ```c++
+  template<class T>
+  struct iterator_traits{
+      typedef typename I::iterator_category iterator_category    ;
+      typedef typename I::value_type  value_type;
+        typedef typename I::difference_type  difference_type;
+         typedef typename I::pointer  pointer;
+          typedef typename I::refereance  refereance;
+      
+  };
+  ```
+
+  - iterator_traits必须针对传入之型别为pointer及pointer-to-const者，设计特化版本
+
+  
+
+
+### 条款14 在资源管理类中小心copying行为
+
+- 禁止复制，将copying操作声明为private
+- 对底层资源祭出引用计数法
+  - tr1::shared_ptr允许指定删除器(是一个函数或函数对象)，当引用次数为0时被调用
+  - class析构函数会自动调用non-static成员变量的析构函数
+- 复制底部资源
+  - **进行的是深度拷贝，如字符串对象内含一个指针指向一块heap内存，当这样一个字符串对象被复制，不论其指针或其所指内存都会被制作出一个复件**
+- 转移底部资源的拥有权
+  - auto_ptr
+
+### 条款15 在资源管理类中提供对原始资源的访问
+
+- 将RAII class对象(如tr1::shared_ptr)转换为其内含之原始资源(如Inverstment* )
+  - tr1::shared_ptr和auto_ptr都提供一个get成员函数，用来执行显示转换，返回智能指针内部的原始指针(的复件)
+  - 隐式转换: 重载了指针取值和操作符
+  - 提供隐式转换函数
+- 每一个RAII class应该提供一个取得其所管理之资源的办法
+- 对原始资源的访问可能经由显示转换或隐式转换，一般而言显示转换比较安全，但隐式转换对客户比较方便
+
+
+
+### 条款16 成对使用new和delete时要采取相同形式
+
+### 条款17 以独立语句将newed对象置入智能指针
+
+- 在资源被创建(经由　new Widget)和资源被转换为资源管理对象两个时间点之间有可能发生异常干扰
+
+- **以独立语句将newed对象存储于智能指针内，如果不这样做，一旦异常被抛出，有可能导致难以察觉的资源泄露**
+
+- ```c++
+  std::tr1::shared_ptr<Widget> pw(new Widget);  //在单独语句内以智能指针存储newed所得对象
+  processWidget(pw,priority())　//不会导致资源泄露
+  ```
+
+  
+
+  

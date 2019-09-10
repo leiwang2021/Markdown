@@ -1156,6 +1156,103 @@ esac
 - 从文件中读取
   - 每次调用，都会从文件中读取一行文本
 
+## 第15章　呈现数据
+
+### 15.1 理解输入和输出
+
+- 标准文件描述符
+  - Linux系统将每个对象当作文件处理，包括输入和输出进程，Linux用文件描述符来标识每个文件对象
+  - 三个保留的特殊文件符0 1 2
+    - STDIN,代表shell的标准输入，即键盘，可以使用输入重定向改变<
+    - STDOUT,shell的标准输出，显示器，可以使用输出重定向改变>     z追加到文件>>
+    - STDERR,处理错误信息，代表shell的标准错误输出
+- 重定向错误
+  - 只重定向错误，将文件描述符放在重定向符号前
+  - 重定向错误和数据，同时重定向错误和正常输出时，必须使用两个重定向符号
+  - 特殊的重定向符号&>，可以将STDERR和STDOUT的输出重定向到同一个输出文件
+
+### 15.2 在脚本中重定向输出
+
+- 临时重定向
+
+  - ./test8 2>test9 通过STDOUT显示的文本显示在了屏幕上，而发送给STDERR的echo语句则被重定向到了输出文件
+
+- 永久重定向
+
+  - 可以用exex命令告诉shell在脚本执行期间重定向某个文件描述符
+
+  - ```shell
+     #!/bin/bash
+     
+     exec 2>testerror
+     
+     echo "This is the start of the script"
+     echo "now redirecting output "
+     
+     exec 1>testout
+     
+     echo "This output should go to the testout file"
+     echo "This output should go to the testerror file" >&2
+    
+    ```
+
+### 15.3 在脚本中重定向输入
+
+- exec命令允许将STDIN重定向到Linux系统上的文件中
+
+- exec 0<testfile
+
+- ```shell
+   #!/bin/bash
+   
+   exec 0<testfile
+   count=1
+   
+   while read line
+   do
+       echo "Line #$count: $line"
+       count=$[ $count+1 ]
+   done
+  ```
+
+### 15.4 创建自己的重定向
+
+- 在shell中最多有9个打开的文件描述符，其他6个从3-8的文件描述符均可用作输入或输出重定向
+
+- 创建输出文件描述符　　
+
+  - exec 3>test13out
+  - echo "This should be stored in the file " >&3     将被重定向到文件test13out中
+
+- 重定向文件描述符
+
+  ```shell
+   #!/bin/bash
+   
+   exec 3>&1
+   exec 1>testout
+   
+   echo "This should store in the output file"
+   
+   exec 1>&3
+   echo "This should dispaly in the screen"
+  
+  ```
+
+- 创建输入文件描述符
+
+  - 与重定向输出文件描述符类似的方法
+
+- 创建读写文件描述符
+
+  - exec 3<> testfile
+  - 由于是对同一个文件进行读写，shell会维护一个内部指针，指明在文件中的当前位置，任何读写都会从文件指针上次的位置开始
+
+- 关闭文件描述符
+
+  - 关闭文件描述符　exec 3>&-
+  - 若关闭后，在脚本中打开同一个文件，会用一个新的文件替换已有的文件
+
 
 
   
