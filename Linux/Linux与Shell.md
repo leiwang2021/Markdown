@@ -1193,7 +1193,7 @@ esac
      
      echo "This output should go to the testout file"
      echo "This output should go to the testerror file" >&2
-    
+      
     ```
 
 ### 15.3 在脚本中重定向输入
@@ -1252,6 +1252,112 @@ esac
 
   - 关闭文件描述符　exec 3>&-
   - 若关闭后，在脚本中打开同一个文件，会用一个新的文件替换已有的文件
+
+### 15.5 列出打开的文件描述符
+
+- lsof列出整个Linux系统打开的所有文件描述符　　　/usr/sbin/lsof
+- lsof -p     指定进程　　　　　lsof -d 指定要显示的文件描述符
+- lsof -a -p $$ -d 0,1,2　　　　　　　　　-a的选项执行布尔AND运算　　　特殊环境变量$$当前PID
+
+```shell
+ #!/bin/bash
+ 
+ exec 3>test18file1
+ exec 6>test18file2
+ exec 7<testfile
+ 
+ lsof -a -p $$ -d 0,1,2,3,6,7
+
+```
+
+### 15.6 阻止命令输出
+
+- 可将STDERR重定向到一个叫做null文件的特殊文件,null文件什么都没有，shell输出到null文件的任何数据都不会保存，位置在/dev/null,这是避免出现错误信息，也无需保存它们的一个常用方法
+- cat  /dev/null   >testfile     清除testfile内容的常见方法，清除日志文件的常用方法
+
+### 15.7 创建临时文件
+
+- /tmp目录存放不需要永久保留的文件，大多数Linux系统在启动时自动删除/tmp目录的所有文件，不用担心清理
+- mktemp 命令会在/tmp目录下创建一个唯一的临时文件
+- 创建本地临时文件　　mktemp testing.XXXXXX     要加6个XXXXXX,  mktemp命令会用6个字符码替换这6个X
+- 在/tmp目录创建临时文件
+  - -t选项会强制mktemp命令在系统的临时目录来创建该文件　　　mktemp -t ss.XXXXXX　　　会返回全路径名称
+- 创建临时目录
+  - -d选项创建临时目录
+
+### 15.8 记录消息
+
+- tee命令将STDIN过来的数据同时发往STDOUT和指定的文件名　　　 date | tee testfile　
+
+### 15.9 实例
+
+```shell
+ #!/bin/bash
+ 
+ outfile='members.sql'
+ 
+ IFS=','
+ while read lname fname address city state zip
+ do  
+     cat >> $outfile << EOF
+     INSERT INTO members (lname,fname,address,city,state,zip) VALUES
+     ('$lname','$fname','$address','$city','$state','$zip');
+ EOF
+ done < ${1}   #指明了待读取的文件
+```
+
+
+
+## 第16 章　控制脚本
+
+### 16.1 处理信号
+
+- Linux系统利用信号与运行在系统中的进程进行通信
+
+- 重温Linux信号
+
+  - 默认情况下，bash shell会忽略收到的任何SIGQUIT(3)和SIGTERM(15)
+
+- 生成信号
+
+  - bash shell允许用键盘上的组合键生成两种基本的Linux信号
+  - 中断进程　CTRL+Ｃ会生成SIGINT,并将其发送给当前在shell中运行的所有进程
+  - 暂停进程　CTRL+Z会生成一个SIGTSTP,停止shell中运行的任何进程
+    - 可以用kill命令来发送一个SIGKILL命令来终止它，kill -9 PID
+
+- 捕获信号
+
+  - trap命令允许指定shell脚本要监看并从shell中拦截的Linux信号，该信号不再由shell处理，而是交由本地处理
+
+  - trap commands signals    捕获到signals时执行commands
+
+  - ```shell
+     #!/bin/bash
+     
+     trap "echo ' Sorry! I have trapped Ctrl-C'" SIGINT
+     
+     echo This is a test script
+     
+     count=1
+     while [ $count -le 10 ]
+     do
+         echo "Loop #$count"
+         sleep 1
+         count=$[ $count+1 ]
+     done
+     echo "This is the end of the test"
+    ```
+
+- 捕获脚本退出
+
+  - 捕获shell脚本的退出，只要在trap命令后加上EXIT信号就可以了　　trap "echo GoodBye..." EXIT
+
+- 修改或移除捕获
+
+  - 重新使用带有新选项的trap命令，修改捕获
+  - 删除已设置好的捕获:  加上两个破折号　　trap -- SIGINT
+
+
 
 
 
