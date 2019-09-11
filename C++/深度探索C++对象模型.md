@@ -385,7 +385,75 @@
   - 由编译器自动加上的额外的data members,用以支持某些语言特性
   - 因为alignment(边界调整)的需要
 
+### 3.1 Data Member的绑定
 
+- **extern**可以置于变量或者函数前，以标示变量或者函数的定义在别的文件中，提示编译器遇到此变量和函数时在其他模块中寻找其定义。此外extern也可用来进行**链接指定**。
+
+- 在一个inline　member funtion内的一个data member绑定操作，会在整个class声明完成之后才发生，但是对于member funtion的argument list不为真，argument list中的名称还是会在它们第一次遭遇时被适当地决议
+
+- **把nested type声明放在class的起始处，如果把nested typedef定义于在class中被参考之前，就可以确保非直觉绑定的正确性**
+
+  ```c++
+   //错误的方式
+   typedef int length;
+   
+   class Point3d{
+       public:
+           void mumble(length val){_val=val;}　　　//length被决议为global
+           length mumble(){return _val;}
+       private:
+           typedef float length; //这样的声明将使之前的参考操作不合法
+           length _val;
+   };
+   //正确的方式
+    typedef int length;
+   
+   class Point3d{
+       public:
+           typedef float length;
+           void mumble(length val){_val=val;}
+           length mumble(){return _val;}
+       private:
+           length _val;
+   };
+  ```
+
+  - 一个inline函数实体，在整个class声明未被完全看见之前，是不会被评估求值的，一个inline memberfuntion 内的一个data member 绑定操作，会在整个class声明完成之后发生
+
+
+
+### 3.2 Data Member的布局
+
+- members的排列只需要符合较晚出现的members在class object中有较高的地址这一条件即可，members的边界调整可能需要一些bytes
+- 任何中间介入的static data member都不会被放进对象布局之中
+- 目前各家编译器都是把一个以上的access section连锁在一起，依照声明的顺序，成为一个连续区块
+
+### 3.3 Data  Member的存取
+
+- static Data members只有一个实例，存放在程序的data segment之中，其实不在class object之中，因此存取static members并不需要通过class object
+
+- 对于复杂继承关系而来的static member,还是只有一个实例，其存取路径仍然直接
+
+- 若取一个static data member的地址，会得到一个指向其数据类型的指针，而不是一个指向其class member的指针
+
+- 如果两个classes,每一个都声明了一个static member freeList,它们放在程序的data segment时，会导致名称冲突，编译器的解决方法是暗中对每一个static data member编码
+
+- Nonstatic Data Members
+
+  - 在一个member function中直接处理一个nonstatic data member,所谓的implicit class object对象就会发生，即this->x  
+
+  - 对一个nonstatic data member进行存取操作，编译器需要把class object的起始地址加上data member的偏移位置
+
+  - 每一个nonstatic data member的偏移位置在编译时期就可获得，即使member属于base class subobject也一样，存取效率相同
+
+  - ```c++
+    Point3d origin;
+    origin.x=0;
+    Point3d *pt=&origin;
+    pt->x=0;
+    ```
+
+  - 从origin存取和从pt存取的差异?  当Point3d是一个derived class,而其继承体系结构中有一个virtual base class,并且被存取的member是一个从该virtual base class继承而来的member时，不知道pt指向哪一种class type,也就不知道编译时期这个member真正的偏移位置，所以这个存取操作必须延迟到执行期，但如果使用origin,类型确定，members的偏移位置在编译时期就固定了
 
   
 

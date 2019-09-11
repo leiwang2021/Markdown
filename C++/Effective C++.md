@@ -322,7 +322,73 @@
 - 把资源放进对象内，便可依赖C++的析构函数自动调用机制确保资源被释放
 - auto_ptr是类指针对象，即智能指针，其析构函数自动对其所指对象调用delete
 - 注意别让多个auto_ptr同时指向同一对象，**若通过copy或copy assignment操作符复制它们，它们会变成null,而复制所得的指针将取得资源的唯一拥有权**
-
 - 引用计数型智慧指针RCSP,行为类似垃圾回收，tr1::shared_ptr是一个RCSP
 - auto_ptr和tr1::shared_ptr两者都在其析构函数内做delete而不是delete [] 操作
+
+### 条款14 在资源管理类中小心copying行为
+
+- 禁止复制，将copying操作声明为private
+- 对底层资源祭出引用计数法
+  - tr1::shared_ptr允许指定删除器(是一个函数或函数对象)，当引用次数为0时被调用
+  - class析构函数会自动调用non-static成员变量的析构函数
+- 复制底部资源
+  - **进行的是深度拷贝，如字符串对象内含一个指针指向一块heap内存，当这样一个字符串对象被复制，不论其指针或其所指内存都会被制作出一个复件**
+- 转移底部资源的拥有权
+  - auto_ptr
+
+### 条款15 在资源管理类中提供对原始资源的访问
+
+- 将RAII class对象(如tr1::shared_ptr)转换为其内含之原始资源(如Inverstment* )
+  - tr1::shared_ptr和auto_ptr都提供一个get成员函数，用来执行显示转换，返回智能指针内部的原始指针(的复件)
+  - 隐式转换: 重载了指针取值和操作符
+  - 提供隐式转换函数
+- 每一个RAII class应该提供一个取得其所管理之资源的办法
+- 对原始资源的访问可能经由显示转换或隐式转换，一般而言显示转换比较安全，但隐式转换对客户比较方便
+
+
+
+### 条款16 成对使用new和delete时要采取相同形式
+
+### 条款17 以独立语句将newed对象置入智能指针
+
+- 在资源被创建(经由　new Widget)和资源被转换为资源管理对象两个时间点之间有可能发生异常干扰
+
+- **以独立语句将newed对象存储于智能指针内，如果不这样做，一旦异常被抛出，有可能导致难以察觉的资源泄露**
+
+- ```c++
+  std::tr1::shared_ptr<Widget> pw(new Widget);  //在单独语句内以智能指针存储newed所得对象
+  processWidget(pw,priority())　//不会导致资源泄露
+  ```
+
+
+## 第四章　设计与声明
+
+### 条款18 让接口容易被正确使用、不易被误用
+
+- 任何接口如果要求客户必须记得做某些事情，就是有着不正确使用的倾向，教佳接口的设计原则是先发制人
+
+- tr1::shared_ptr提供的某个构造函数接受两个实参:一个是被管理的指针，另一个是引用次数为０时被调用的删除器　　std::tr1::shared_ptr<Investment> Pinv(static_cast<Investment*> (0),getrifofInvertment);
+
+- cross-DLL problem问题，发生在对象在动态链接库(DLL)中被new创建，却在另一个DLL内被delete销毁，tr1::shared_ptr没有这个问题，因为它会追踪记录引用次数为0时该调用的那个DLL's delete
+
+- ```c++
+  std::tr1::shared_ptr<Investment> createInvestment(){
+      std::tr1::shared_ptr<Investment> retVal(static_cast<Investment*>(0),getridofInvestment);
+      retVal=...;
+      return retVal;
+  }
+  ```
+
+### 条款19 设计class犹如设计type
+
+### 条款20 宁以pass-by-reference-to-const替换pass-by-value
+
+- 缺省情况下C++函数参数都是以实际实参的复件为初值，而调用端所获得的是函数返回值的一个副件，这个复件由对象的copy构造函数产出
+- 以by reference 方式传递参数也可以避免slicing问题，当一个derived class 对象以by value 方式传递并被视为一个base class 对象，base class的copy构造函数会被调用
+- 解决切割问题的办法：　以by reference-to-const的方式传递
+- references往往以指针实现出来
+- 内置类型pass by value效率更高些
+- pass-by-value并不昂贵的唯一对象是内置类型和STL的迭代器和函数对象
+
+
 
