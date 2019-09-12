@@ -455,7 +455,87 @@
 
   - 从origin存取和从pt存取的差异?  当Point3d是一个derived class,而其继承体系结构中有一个virtual base class,并且被存取的member是一个从该virtual base class继承而来的member时，不知道pt指向哪一种class type,也就不知道编译时期这个member真正的偏移位置，所以这个存取操作必须延迟到执行期，但如果使用origin,类型确定，members的偏移位置在编译时期就固定了
 
-  
 
+### 3.4 继承与Data Member
 
+- 在大部分编译器上头，base class members总是先出现，但属于virtual base class的除外
 
+- 单一继承不含虚函数、单一继承含虚函数、多重继承、虚拟继承
+
+- 只要继承不要多态(单一继承且没有虚函数)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 19-12-49.png)
+
+  - 出现在derived class中的base class subobject有其完整原样性
+
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 19-18-24.png)
+
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 19-18-58.png)
+
+    - 现在Concrete3的object大小是16bytes,　Concrete2的大小是12bytes
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 19-20-41.png)
+
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 19-26-46.png)
+
+- 加上多态(单一继承并含有虚函数的情况)
+  - 有的编译器把vptr放在class object的尾端，可以保留base class C struct的对象布局，某些编译器把vptr放在class object的前端，有一些好处，代价是丧失了C语言从一个C　struct派生出一个具有多态性质的class的语言兼容性
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 19-42-57.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 19-43-21.png)
+
+  -  父类对象和子类对象分别有vptr指针，指向虚函数表，表中存储函数入口地址
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 20-18-48.png)
+
+  - 1.普通继承+父类无virtual函数 
+
+     若子类没有新定义virtual函数 此时子类的布局是 :
+
+    ​                         由低地址->高地址 为父类的元素(没有vptr),子类的元素(没有vptr).
+
+       若子类有新定义virtual函数 此时子类的布局是 :
+
+    ​                         由低地址->高地址 为父类的元素(没有vptr),子类的元素(包含vptr,指向vtable.)
+
+    2. 普通继承+父类有virtual函数
+             不管子类没有新定义virtual函数 此时子类的布局是 : 由低地址->高地址 为父类的元素(包含vptr), 子类的元素.
+             如果子类有新定义的virtual函数,那么**在父类的vptr**(也就是第一个vptr)对应的vtable中**添加**一个函数指针.
+    3. virtual继承
+          若子类没有新定义virtual函数 此时子类的布局是 :
+
+    ​         由低地址->高地址 子类的元素(有vptr),虚基类的元素.为什么这里会出现vptr,因为虚基类派生出来的类中,虚类的对象不在固定位置(猜测应该是在内存的尾部),需要一个中介才能访问虚类的对象.所以虽然没有virtual函数,子类也需要有一个vptr,对应的vtable中需要有一项指向虚基类.
+    ​         若子类有新定义virtual函数 此时子类的布局是与没有定义新virtual函数内存布局一致.但是在vtable中会多出新增的虚函数的指针.
+
+    　4.多重继承
+        此时子类的布局是 :
+
+    ​                  由低地址->高地址 为父类p1的元素(p1按照实际情况确定元素中是否包含vptr), 父类p2的元素(p2按照实际情况确定元素中是否包含vptr),子类的元素.
+       如果所有父类都没有vptr,那么如果子类定义了新的virtual function,那么子类的元素中会有vptr,对应的vtable会有相应的函数指针.
+      如果有的父类存在vptr.如果子类定义了新的virtual function,会生成一个子类的vtable，这个子类的vtable是，在它的父类的vtable中后添加这个新的虚函数指针生成的.因为子类分配的空间显示并没有新增加一个4字节的指针空间，其实不管子类增加了多少新的虚函数，其空间大小不变，因为其和虚函数相关的分配的空间就是一个vptr，是一个指针，也就是4字节，不变，要变是变在vtable.
+
+  - struct和class的区别
+
+    - ![](/home/leiwang/Markdown/C++/picture/20181122191431245.png)
+
+    - 在C++中引入struct是为了保持对C程序的兼容，在引入之后C++对其进行了扩充，现在struct可以拥有静态成员、成员数据可进行初始化、拥有函数、也可以继承、甚至多态也支持。从表面看起来两者之间像是没有区别，有时你把程序中的所有class改为struct，程序也照常运行。之所以说是看起来呢，两者之间肯定还是有差别
+    - struct默认防控属性是public的，而class默认的防控属性是private的
+    - 在继承关系，struct默认是public的，而class是private
+    - **默认的防控属性取决于子类而不是基类**
+
+- 多重继承
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 20-34-16.png)
+
+- 虚拟继承
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 20-39-47.png)
+
+  - Class如果内含一个或多个virtual base class subobjects,将被切割为两部分：一个不变区域和一个共享区域，不变区域中的数据总拥有固定的offset,可变直接存取，共享区域，表现出来的是virtual base class subobjects，位置因每次派生操作而变化。只能被间接存取
+
+  - 多种布局，如下
+
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 20-55-35.png)
+
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 20-56-13.png)
+
+  - 经由一个非多态的class object来存取一个继承而来的virtual base class的member,可以被优化为一个直接存取操作，就好像一个经由对象调用的virtual funtion调用操作，可以在编译时期被决议完成一样。一般而言，virtual base class最有效的一种运用形式就是:一个抽象的virtual base class,没有任何data member。
