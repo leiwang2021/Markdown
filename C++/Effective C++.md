@@ -392,3 +392,25 @@
 
 
 
+### 条款21 必须返回对象时，别妄想返回其reference
+
+- 任何函数如果返回一个reference指向某个local对象，或返回指针指向某个local对象，将一败涂地
+- 绝不要返回pointer或reference指向一个local stack对象，或返回reference指向一个heap-based对象，或返回pointer或reference指向一个local static对象
+
+### 条款22 将成员变量声明为private
+
+- 一旦将一个成员变量声明为public或protected而客户开始使用它，就很难改变那个成员变量所涉及的一切，太多代码需要重写、重新测试、重新编写文档、重新编译等。。。
+- 从封装的角度看，其实只有两种访问权限private(提供封装)和其他(不提供封装)
+- protected并不比public更具封装性
+
+### 条款23 宁以non-member、non-friend替换member函数(更大的封装性)
+
+- 面向对象守则要求数据尽可能被封装：使我们能改变事物而只影响优先客户
+- 越多函数可以访问它，数据的封装性就越低
+- 能够访问private成员变量的函数只有class的member函数和friend函数
+- namespace可跨越多个源码文件，classes不能
+- 将所有便利函数放在多个头文件但属于同一个命名空间
+- derived classes无法访问base class中private成员
+
+
+

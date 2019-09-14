@@ -531,11 +531,32 @@
   ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 20-39-47.png)
 
   - Class如果内含一个或多个virtual base class subobjects,将被切割为两部分：一个不变区域和一个共享区域，不变区域中的数据总拥有固定的offset,可变直接存取，共享区域，表现出来的是virtual base class subobjects，位置因每次派生操作而变化。只能被间接存取
-
   - 多种布局，如下
 
     - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 20-55-35.png)
 
     - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-12 20-56-13.png)
-
   - 经由一个非多态的class object来存取一个继承而来的virtual base class的member,可以被优化为一个直接存取操作，就好像一个经由对象调用的virtual funtion调用操作，可以在编译时期被决议完成一样。一般而言，virtual base class最有效的一种运用形式就是:一个抽象的virtual base class,没有任何data member。
+
+### 3.5 对象成员的效率
+
+- 若关心程序效率，应该实际测试
+- 间接性压抑了把所有运算都移往寄存器执行的优化能力
+
+
+
+### 3.6 指向data members的指针
+
+- 所有编译器不是把vptr放在对象的头就是放在对象的尾
+
+- & Point3d::z 将得到z在class object中的偏移位置(offset)
+
+- ```c++
+  float Point3d::*p1=0;
+  float Point3d::*p2=&Point3d::x;
+  //为了区分p1和p2，每一个真正的member offset值都被加上１
+  ```
+
+- 取一个正在绑定于class object的data member的地址，将会得到该member在内存中的真正地址
+
+- 虚拟继承带来的冲击：　每一层虚拟继承都导入了一个额外层次的间接性

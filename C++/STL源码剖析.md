@@ -347,7 +347,14 @@
 - 设计适当的相应型别，是迭代器的责任，设计适当的迭代器，则是容器的责任
 - **traits 编程技法大量运用于STL实现品中，它利用内嵌型别的编程技巧与编译器的tempalte参数推导功能，增强C++未能提供的关于型别认证方面的能力，弥补C++不为强型别语言的遗憾**
 
+### 3.6 iteraotr源代码完整重列
 
+### 3.7 SGI STL的私房菜: __type_traits
+
+- \__type__traits负责萃取型别的特性，这个型别是否具有non-trival的构造、析构、拷贝、赋值，如果没有，直接采用最有效率的措施，内存直接处理操作
+- 编译器只有面对class object形式的参数，才会做参数推导
+- 对所有C++标量型别定义\__type_traits的特化版本
+- 一个class什么时候该有自己的non-trival default constructor, copy constructor,assignment constructor, destructor?   如果class内含有指针，并且对它进行内存动态配置，那么这个class就需要实现出自己的non-trival-xxx
 
   
 
