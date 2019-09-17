@@ -352,12 +352,117 @@
 ### 3.7 SGI STL的私房菜: __type_traits
 
 - \__type__traits负责萃取型别的特性，这个型别是否具有non-trival的构造、析构、拷贝、赋值，如果没有，直接采用最有效率的措施，内存直接处理操作
+
 - 编译器只有面对class object形式的参数，才会做参数推导
+
 - 对所有C++标量型别定义\__type_traits的特化版本
+
 - 一个class什么时候该有自己的non-trival default constructor, copy constructor,assignment constructor, destructor?   如果class内含有指针，并且对它进行内存动态配置，那么这个class就需要实现出自己的non-trival-xxx
 
-  
 
-  
 
-  
+## 第四章　序列式容器
+
+### 4.1 容器的概观与分类
+
+- STL容器即是将运用最广的一些数据结构实现出来
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-16 15-03-18.png)
+
+- 序列式容器
+  - 其中的元素都可序，但未必有序
+
+### 4.2 vector
+
+- 概述
+
+  - 扩充空间是:  配置新空间/ 数据移动/ 释还旧空间的大工程
+  - array是静态空间，一旦配置了就不能改变
+  - vector是动态空间，随着元素的加入，它的内部机制会自行扩充空间以容纳新元素
+
+- vector定义
+
+- vector的迭代器
+
+  - vector维护的是一个连续线性空间，提供的是　Random Access
+  - vector的迭代器是普通指针
+
+- vector的数据结构
+
+  - 连续线性空间
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-16 15-26-20.png)
+    - begin()
+    - end()
+    - size()
+    - capacity()
+    - empty()
+    - operator[]
+    - front()
+    - back()
+
+- vector的构造与内存管理
+
+  - vector缺省使用alloc作为空间配置器
+  - 如果原大小为0，则配置1,如果不为0，则配置原大小的两倍，前半段用来放置原数据，后半段用来放置新数据
+  - 所谓动态增加大小，并不是在原空间之后接续新空间，而是以原空间大小两倍另外配置一块较大空间，然后将原内容拷贝过来，然后在原内容之后构造新元素，并释放原空间，因此，对vector的任何操作，一旦引起空间重新配置，指向原vector的所有迭代器就都失效了
+
+- vector的元素操作
+  - pop_back()
+  - erase()
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-16 15-52-22.png)
+  - insert()  插入完成后，新节点将位于哨兵迭代器所指之节点的前方
+  - 三种情况
+
+### 4.3 list
+
+- 概述
+
+  - 每次插入或删除一个元素，就配置或释放一个元素空间
+  - 对于任何位置的元素插入或移除，list永远是常数时间
+
+- list的节点
+
+   - 是一个双向链表
+
+- list的迭代器
+
+  - list的节点不保证在存储空间连续存在，不能使用普通指针
+  - list提供的是Bidirectional Iterators
+  - 插入和接合操作都不会造成原来的list迭代器失效
+  - 迭代器内部有一个普通指针，指向list的节点
+
+- list的数据结构
+
+   - SGI list是一个环状双向链表，只需要一个指针，就可以完整表现整个链表
+   - **只要在环状链表的尾端加上一个空白节点，让node指针指向该节点，就能够符合STL的前闭后开区间**
+
+- list的构造与内存管理
+
+   - insert插入，插入之后新节点将位于哨兵迭代器所指之节点的前方，这是STL对于插入操作的标准规范
+   - 插入前的所有迭代器在插入后仍然有效
+
+- list的元素操作
+
+   - push_front()
+   - push_back()
+   - erase()
+   - pop_front()
+   - pop_back()
+   - clear
+   - remove 
+   - unique
+   - transfer  将某连续范围内的元素迁移到某个特定位置之前
+   - splice
+   - reverse
+   - sort
+   - merge
+   - STL算法sort()只接受RandomAccessIterator
+
+   
+
+ 
+
+ 
+
+
+
+

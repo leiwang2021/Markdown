@@ -560,3 +560,60 @@
 - 取一个正在绑定于class object的data member的地址，将会得到该member在内存中的真正地址
 
 - 虚拟继承带来的冲击：　每一层虚拟继承都导入了一个额外层次的间接性
+
+## 第四章　Function语意学
+
+- 三种类型的member funtions: static nonstatic   virtual
+
+### 4.1 Member的各种调用方式
+
+- 非静态成员函数
+
+  - 编译器内部已将member函数实体转换为对等的nonmember函数实体,转化步骤
+    - 改写函数原型，安插额外参数this
+    - 将每一个对nonstatic data member的存取操作改为经由this指针来存取
+    - 将成员函数重新写成一个外部函数
+  - 名称的特殊处理
+    - member的名称前面会被加上class名称，形成独一无二的命名
+    - 两个实体如果拥有独一无二的name mangling, 那么任何不正确的调用操作在链接时期就因无法决议而失败
+- 虚拟成员函数
+
+  - vptr
+- 静态成员函数
+  - 由于static member funtion 没有this 指针，其地址的类似并不是一个指向class member funtion的指针，而是一个nonmember函数指针
+
+### 4.2 虚拟成员函数
+
+#### 单一继承
+
+- 在C++中，多态表示以一个public base class的指针(或reference),寻址出一个derived class object的意思
+
+- RTTI, 有了RTTI,就能在执行期查询一个多态的pointer或多态的reference了，欲鉴定出哪些classes展现出多态特性，需要额外的执行期信息，只要一个class含有virtual funtion,它就需要这份额外的执行信息
+
+- vitual funtions 可以在编译期获知，地址是固定不变的，执行期不可能新增或替换
+
+- 一个class只会有一个virtual table
+
+  - 这一class所定义的函数实例
+  - 继承自base class的函数实例
+  - 一个pure_virtual_called()函数实例，可以当作执行期异常处理函数
+
+- ```c++
+  ptr->z();
+  (*ptr->vptr[4])(ptr)  //经由ptr可以存取该对象的virtual table,每一个z()函数地址都被放在slot4中
+  ```
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-17 15-02-51.png)
+
+#### 多重继承下的virtual funtions
+
+- 在多重继承之下，一个derived class内含n-1个额外的virtual table,针对每一个virtual table,Derived 对象中有对应的vptr
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-17 15-19-52.png)
+
+  
+
+#### 虚拟继承下的virtual funtions
+
+- 不要在一个virtual base class中声明nonstatic data members
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-17 15-33-42.png)
+

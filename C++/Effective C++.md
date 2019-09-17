@@ -412,5 +412,112 @@
 - 将所有便利函数放在多个头文件但属于同一个命名空间
 - derived classes无法访问base class中private成员
 
+### 条款24 若所有参数都需要类型转换，为此采用non-member函数
+
+- 如果你需要为某个函数的所有参数(包括被this指针所指的那个隐喻参数)进行类型转换，那么这个函数必须是个non-member
+
+### 条款25 考虑写出一个不抛出异常的swap函数
+
+- std::swap的典型实现
+
+- 我们不能改变std命名空间内的任何东西，但我们可以为标准template制造特化版本,但不能添加新的templates
+
+- 所有STL容器也都提供public swap 成员函数，和std::swap特化版本(用以调用前者)
+
+- 函数模板
+
+  - 函数模板只能全特化，不能偏特化，如果要偏特化的话只能重载
+
+  - ```c++
+    template< >                                  // 全特化　注意语法
+    double add(double a, double b)  { return a + b; }
+    
+    int main()
+    {
+        int x = 10, y = 20;
+        double z = 1.1, w = 2.2;
+        std::cout << add(x, y) << std::endl;   // 调用普通版本
+        std::cout << add(z, w) << std::endl;   // 调用全特化版本
+        return 0;
+    }
+    ```
+
+  - 如果有与实参更加匹配的特例化版本，编译器将会选择特例化版本
+
+  - 函数模板重载（不存在偏特化）,因为偏特化版本本质上仍然是模板，所以如果需要的话，可以重载一个函数模板
+
+  - ```c++
+    template<class T1>　　// 重载版本，接收参数为指针
+    T1 add(T1* a, T1* b) { return *a + *b; }   
+    int main()
+    {
+        int a = 10, b = 20;
+        int *x = &a, *y = &b;
+        add(a, b);    // 调用普通模板
+        add(x, y);　  // 调用重载的模板
+        return 0;
+    }
+    ```
+
+- 类模板
+
+  - 类模板全特化比较好理解，跟函数模板一样，全特化是一个实例，当编译器匹配时会优先匹配参数一致的实例
+
+  - ```c++
+    template< >     　　　// 注意语法
+    class A<char*>       // 一个全特化的模板类A
+    {                    // 当用char*类型来实例化类模板A时，将会优先调用这个全特化实例
+    public:
+        explicit A(char* val) : t(val) { }
+        char* add(char* a, char* b) { return strcat(a, b); }
+    private:
+        char* t;
+    };
+    ```
+
+  - 类模板偏特化本质上都是指定部分类型，让偏特化版本称为普通版本的子集，若实例化时参数类型为指定的类型，则优先调用特例化版本
+
+    - ```c++
+      template<class T1, class T2>      // 普通版本，有两个模板参数
+      class B { ..... };
+      
+      template<class T2>　　　         // 偏特化版本，指定其中一个参数，即指定了部分类型
+      class B<int , T2> { ..... };　　// 当实例化时的第一个参数为int 则会优先调用这个版本
+      ```
+
+    - ```c++
+      template<class T>     // 普通版本
+      class B { ..... };
+      
+      template<class T>　　　//这个偏特化版本只接收指针类型的模板实参 
+      class B<T*> { ..... }; 
+      
+      template<class T>
+      class B<T&> { ..... };     // 这个偏特化版本只接受引用类型的模板实参
+      ```
+
+    - ```c++
+      template<class T>    //普通版本
+      class B { ..... };
+      
+      template<class T>　　　// 这种只接受用T实例化的vector的模板实参．也是一种偏特化
+      class B<vector<T>> { ......  };  
+      ```
+
+- 高效的swaps几乎总是基于对内置类型的操作(例如pimpl手法的底层指针)，而内置类型上的操作绝不会抛出异常
+
+- 总结
+
+  - 当std::swap 对你的类型效率不高时，提供一个swap成员函数，并确定这个函数不抛出异常
+  - 如果提供一个member swap,也应该提供一个non-member　swap用来调用前者，对于classes(而非templates),请特化std::swap
+  - 调用swap时应针对std::swap 使用using声明，然后调用swap且不带修饰
+  - 为用户定义类型进行std templates全特化是好的，然不要在std内进行模板重载
+
+  
+
+
+
+
+
 
 

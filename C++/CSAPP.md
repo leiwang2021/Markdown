@@ -405,4 +405,37 @@
     
     ```
 
-    
+
+### 3.10 在机器级程序中将控制与数据结合起来
+
+- 理解指针
+
+  - void* 类型代表通用指针，malloc返回一个通用指针
+
+  - 将指针从一种类型强制转换成另一种类型，只改变它的类型，而不改变它的值
+
+  - 函数指针:  函数指针的值是该函数机器代码表示中第一条指令的地址　　int  (*fp) (int,int\* )    fp为函数指针
+
+  - ```c++
+    int  (*fp) (int,int* )   // fp为函数指针  ()是必须的
+    int *f(int *) //f是一个函数
+    ```
+
+  
+
+- 使用GDB调试器
+  - gdb prog 调试prog程序
+  - quit run   kill
+  - break   delete
+  - stepi    nexti   continue  finish
+  - disas
+  - info frame
+  - info registers
+  - help
+  - DDD,GDB的扩展，提供了图形界面
+- 内存越界引用和缓冲区溢出
+- 对抗缓冲区溢出攻击
+  - 栈随机化
+  - 栈破坏检测
+  - 限制可执行代码区域
+- 支持变长栈帧
