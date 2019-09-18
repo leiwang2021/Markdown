@@ -1375,6 +1375,94 @@ esac
 
 ### 16.4 作业控制
 
+- 查看作业
+  - 可以用$$变量来显示Linux系统分配给该脚本的PID
+  - jobs命令允许查看shell当前正在处理的作业
+  - jobs -l　可查看作业的PID
+  - 带加号的作业被当作默认的作业
+  - 带减号的作业成为下一个默认的作业
+- 重启停止的作业
+  - bg   作业号　　以后台模式重启一个作业
+  - fg   作业号　　以前台模式重启作业
+
+### 16.5 调整谦让度
+
+- 调度优先级是内核分配给进程的CPU时间，由shell启动的所有进程的调度优先级默认都是相同的，默认情况下以优先级0来启动所有进程
+- 调度优先级从-20 到19(最低)
+- nice命令
+  - nice -n  优先级　脚本　　　指定调度优先级
+  - nice -n 10 sleep 1000 &
+  - ps -p 8324 -o pid,ppid,ni,cmd　　查看优先级
+  - 普通用户被阻止提高优先级
+- renice命令
+  - 改变系统上已运行命令的优先级，允许你指定运行进程的PID来改变它的优先级
+  - renice -n 10 -p 8614
+  - ps -p 8614 -o ni
+
+### 16.6 定时运行作业
+
+- at命令
+  - at的守护进程atd以后台模式运行，检查作业队列来运行，大多数在启动时运行此守护进程
+  - atd守护进程会检查目录　/var/spool/at  来获取at命令提交的作业，每60秒
+  - at命令的格式
+    - at [-f filenaem] time
+    - 在使用at命令时，该作业会被提交到作业队列，26种不同优先级的作业
+    - -q 参数指定不同的队列字母优先级
+  - 获取作业的输出
+    - at命令将用户的电子邮件作为STDOUT和STDERR,最好重定向
+  - 列出等待的作业
+    - atq命令可以查看系统中有哪些作业在等待
+  - 删除作业
+    - atrm
+
+- 安排需要定期执行的脚本
+
+  - cron程序会在后台运行并检查一个特殊的表，以获知已安排执行的作业
+
+  - cron时间表
+
+  - 命令列表必须指定运行的命令或脚本的全路径名
+
+  - 构建cron时间表
+
+    - crontab -l  列出
+    - crontab -e创建
+
+  - 浏览cron目录
+
+    - 可以用预配置的cron脚本目录会更方便
+
+    - ls /etc/cron.*ly
+
+    - ```shell
+      /etc/cron.daily:
+      0anacron    aptitude          dpkg           man-db   popularity-contest
+      apport      bsdmainutils      google-chrome  mlocate  ubuntu-advantage-tools
+      apt-compat  cracklib-runtime  logrotate      passwd   update-notifier-common
+      
+      /etc/cron.hourly:
+      
+      /etc/cron.monthly:
+      0anacron
+      
+      /etc/cron.weekly:
+      0anacron  man-db  update-notifier-common
+      
+      ```
+
+    - 将脚本复制到相应的目录
+
+  - anacron程序
+
+    - 如果某个程序错过了执行时间，它会尽快执行
+    - 只会处理位于cron目录的程序
+    - 时间戳文件:  /var/spool/anacron
+    - 自己的时间表　　/etc/anacrontab
+
+- 使用新shell启动脚本
+
+  - 每次启动一个新shell时，bash shell都会运行.bashrc文件，　可将命令放在该脚本文件中
+
 
 
 
