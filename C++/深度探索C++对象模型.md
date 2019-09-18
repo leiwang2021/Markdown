@@ -617,3 +617,28 @@
 - 不要在一个virtual base class中声明nonstatic data members
 - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-17 15-33-42.png)
 
+### 4.3 函数的效能
+
+- inline函数不只能够节省一般函数调用带来的额外负担，也提供了程序优化的额外机会
+
+
+
+### 4.4 指向Member funtion的指针
+
+- 对于一个nonstatic member function取其地址，将获得该函数在内存中的地址，对一个virtual funtion,其地址在编译时期是未知的，所能获得的是virtual table中的索引值
+- 如何识别函数指针值是内存地址还是virtual table索引?
+- 一个指向member function 的指针是一个结构，内含三个字段: index, faddr,delta
+
+
+
+### 4.5 Inline functions
+
+- 在inline扩展期间，每一个形式参数都会被对应的实际参数取代，面对会带来副作用的实际参数，通常需要引入临时性对象
+- inline函数中的局部变量，再加上有副作用的参数，可能会导致大量临时性对象的产生
+- 如果一个inline函数被调用太多次，会产生大量的扩展码，使程序大小暴涨
+- 参数带有副作用，或是以一个单一表达式做多重调用，或是在inline函数中有多个局部变量，都会产生临时性对象
+
+
+
+
+

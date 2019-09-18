@@ -457,12 +457,31 @@
    - merge
    - STL算法sort()只接受RandomAccessIterator
 
-   
+
+### 4.4 deque
+
+- 概述
+  - deuqe是一种双向开口的连续线性空间，可以在头尾两端分别做元素的插入和删除操作
+  - 没有容量的概念，动态地以分段连续空间组合而成
+  - deque 也提供Random Access Iterator,不是普通指针
+- deque的中控器
+  - dueque由一段一段的定量连续空间构成，一旦有必要在deque的前端或尾端增加新空间，便配置一段定量连续新空间，串接在deque的头端或尾端
+  - map是一个T**,所指之物又是一个指针，指向缓冲区
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-18 14-20-02.png)
 
  
 
- 
+- deque的迭代器
 
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-18 14-30-30.png)
 
+  -   一旦行进遇到缓冲区边缘，要特别小心，视前进或后退而定，可能需要调用set_node()跳一个缓冲区
+
+- deque的数据结构
+
+    - map是块连续空间，每个元素都是指针，指向一个缓冲区
+-　 deque的构造与内存管理
+
+    ​        
 
 
