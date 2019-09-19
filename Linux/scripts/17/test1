@@ -1,0 +1,15 @@
+#!/bin/bash
+
+func1()
+{
+
+    read -p "Enter a value" value
+    ls -l badfile
+    echo $value
+}
+
+echo "Test the func1"
+func1
+echo "The exit status is: $?"
+result=$(func1)
+echo "The result is $result"

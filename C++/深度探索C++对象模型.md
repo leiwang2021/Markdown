@@ -638,6 +638,73 @@
 - 如果一个inline函数被调用太多次，会产生大量的扩展码，使程序大小暴涨
 - 参数带有副作用，或是以一个单一表达式做多重调用，或是在inline函数中有多个局部变量，都会产生临时性对象
 
+## 第五章　构造、析构、拷贝语意学
+
+- 纯虚函数的存在
+
+  - 抽象基类，不能被实例化
+
+  - 定义和调用一个纯虚函数，只能静态地调用
+  - 对于pure virtual destructor ,class设计者一定得定义它，由于每一个derived class destructor会被编译器加以扩张，以静态调用的方式调用其每一个virtual base class的destructor
+  - 不要把virtual destructor声明为pure
+
+- 虚拟规格的存在
+
+- 虚拟规格中const的存在
+
+- 重新考虑class的声明
+
+  ```c++
+  class Abstract_base{
+      public:
+      virtual ~Abstract_base();         //不再是pure virtual
+      virtual void interface() =0;   //不再是const
+      const char* mumble() const {return _mumble;}   //不再是virtual
+      protected:
+     　　Abstract_base(char *pc=0);        //constructor
+     　　char* mumble;
+  };
+  ```
+
+### 5.1 无继承情况下的对象构造
+
+- ```c++
+  typedef struct{
+      float x,y,z;
+  }Point;
+  ```
+
+- plain OI' Data声明形式，既没有被构造也没有被析构
+
+- C++所有全局对象都被以初始化过的数据来对待
+
+- 抽象数据类型
+
+  ```c++
+  class Point{
+      public:
+      Point(float x=0.0,float y=0.0,float z=0.0):_x(x),_y(y),_z(z){}
+      private:
+      float _x,_y,_z;
+  };   //Point class有一个相关的default copy constructor, copy operator,destructor,然而它们都是trivial，编译器实际上根本没有产生它们
+  ```
+
+- 为继承做准备
+
+  ```c++
+  class Point{
+      public：
+      Point(float x=0.0,float y=0.0):_x(x),_y(y){}
+      
+      virtual float z();
+      protected:
+      float _x,_y;
+  };
+  ```
+
+  - 所定义的constructor被附加一些代码，以便将vptr初始化
+  - 合成一个copy constructor和一个copy assignment operator,其操作不是trival,但implicit destructor仍然是trival
+
 
 
 

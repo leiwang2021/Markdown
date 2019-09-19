@@ -480,8 +480,37 @@
 - deque的数据结构
 
     - map是块连续空间，每个元素都是指针，指向一个缓冲区
--　 deque的构造与内存管理
 
-    ​        
+- deque的构造与内存管理
+
+    ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-19 14-40-03.png)
+
+    - 如果map的节点备用空间不足，则配置更大的，拷贝原来的，释放原来的
+
+- deque的元素操作　pop_back, pop_front,clear, erase, insert
+
+    - deque的最初状态(无任何元素时)保有一个缓冲区
 
 
+
+### 4.5 stack
+
+- 概述
+
+  - stack是一种先进后出(FILO)的数据结构
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-19 15-01-58.png)
+
+- stack定义
+
+    - 以某种既有容器作为底部结构，将其接口改变，使之符合"先进后出"的特性，形成一个stack,SGI STL以deque作为缺省情况下的stack底部结构。具有这种修改某物接口，形成另一种风貌之性质者，称为adapter(配接器)
+
+- stack没有迭代器
+
+    - stack所有元素都必须符合先进后出的条件，只有stack顶端的元素，才有机会被外界取用，stack不提供走访功能，也不提供迭代器
+
+- 以list 作为stack的底层容器
+
+    - list也是双口开向的容器
+    - 以list为底部结构并封闭其头端开口，能形成stack
+
+    
