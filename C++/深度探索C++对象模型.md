@@ -707,5 +707,29 @@
 
 
 
+### 5.2 继承体系下的对象构造
+
+- 编译器会扩充constructor,如下的操作
+  - member initialization list中的data members初始化会放在构造函数本体内
+  - 未出现在member initialization list中的member如果有default 构造函数，会被调用
+  - vptr会被设定
+  - 所有上一层的base class constructors必须被调用
+    - 若base class在member initialization list中，按指定参数设定
+    - 若base class没有在......,则默认构造函数被调用
+    - 若base class是多重继承下的第二或后继的base class,那么this指针必须有所调整
+  - 所有virtual base class constructors必须被调用
+- member class objects的destructor会被合成出来的析构器中调用，(以其构造的相反顺序)
+
+#### 虚拟继承
+
+- 在virtual base class情况下的constructor扩充内容，constructor的函数本体必须条件式地测试进来的参数，然后决定调用或不调用相关的virtual base class constructors
+
+#### vptr初始化语意学
+
+- 在一个class的constructor中，经由构造中的对象来调用一个virtual function, 其函数实例应该是在此class中有作用的那个
+- vptr初始化操作应该在base class constructors调用操作之后，但是在程序员供应的代码或是member initialization list中所列的members初始化操作之前
+
+
+
 
 

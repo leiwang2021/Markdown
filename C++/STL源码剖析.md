@@ -513,4 +513,113 @@
     - list也是双口开向的容器
     - 以list为底部结构并封闭其头端开口，能形成stack
 
-    
+
+### 4.6 queue
+
+- 概述
+  - queue是一种FIFO的数据结构，queue有两个出口，不允许遍历
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-23 14-14-44.png)
+- queue定义完整列表
+  - queue以deque作为缺省情况下的queue底部结构
+- queue没有迭代器
+- 以list作为queue的底层容器
+
+### 4.7 heap
+
+- 概述
+  - heap并不归属于STL容器组件，扮演priority queue的助手
+  - binary heap是一种完全二叉树
+  - array可以轻易实现完全二叉树，为隐式表述法，实际实现是以vector为底部容器
+  - max-heap  和min-heap,  STL供应的是max-heap
+- heap算法
+  - push_heap算法
+    - 执行上溯程序，将新结点与其父节点比较
+  - pop_heap算法
+    - 执行下溯程序，将空间节点与其较大子节点对调，并持续下放，直至叶节点为止，然后将前述被割舍元素值设定给这个已到达叶层的空洞结点，再对它执行一次上溯程序
+  - sort_heap算法
+    - 不断对heap进行pop操作，便可获得排序操作
+  - make_heap算法
+    - 用来将一段现有的数据转化为一个heap
+- heap没有迭代器
+
+### 4.8 priority_queue
+
+- 概述
+
+  - 一个拥有权值概念的queue
+
+  - priority_queue完全以底部容器为根据，再加上heap处理规则，缺省情况下以vector为底部容器
+
+  - priority_queue没有迭代器
+
+  - less与greater
+
+    - ```c++
+      
+      template<class _Ty>
+      struct greater : public binary_function<_Ty, _Ty, bool>
+      {	// functor for operator>
+      	bool operator()(const _Ty& _Left, const _Ty& _Right) const
+      	{	// apply operator> to operands
+      		return (_Left > _Right);
+      	}
+      };
+       
+      // TEMPLATE STRUCT less
+      template<class _Ty> 
+      struct less : public binary_function<_Ty, _Ty, bool>
+      {	// functor for operator<
+      	bool operator()(const _Ty& _Left, const _Ty& _Right) const
+      	{	// apply operator< to operands
+      		return (_Left < _Right);
+      	}
+      };
+      ```
+
+    - ```c++
+      
+      #include <iostream>
+      #include <algorithm>
+      #include <functional>
+       
+      using namespace std;
+       
+      int main()
+      {
+      	int nums[] = {5, 3, 1, 2, 4};
+          int length = sizeof(nums)/sizeof(int);	
+      	std::cout << "nums length is " << length << std::endl;
+      	sort(nums, nums + length, greater<int>());
+      	for (int i = 0; i < length; ++i)
+      	{
+      		std::cout << nums[i] << "\t";	
+      	}
+      	std::cout << std::endl;
+      	sort(nums, nums + length, less<int>());
+      	for (int i = 0; i < length; ++i)
+      	{
+      		std::cout << nums[i] << "\t";	
+      	}
+      	std::cout << std::endl;
+      	return 0;
+      }
+      ```
+
+
+
+## 第六章　继承与面向对象设计
+
+### 条款32 确定你的public 继承塑模出is-a关系
+
+- 公开继承意味着  is-a 的关系
+- 适用于base classes身上的每一件事情一定也适用于derived classes身上，因为每一个derived class对象也都是一个base class对象
+
+### 条款33 避免遮掩继承而来的名称
+
+- derived class作用域被嵌套在base class作用域内
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-23 17-10-33.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-23 17-16-09.png)
+
+- derived classes内的名称会遮掩base classes内的名称
+- 为了让被遮掩的名称再见天日，可使用using 声明式或转交函数

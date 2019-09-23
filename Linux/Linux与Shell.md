@@ -1572,7 +1572,47 @@ esac
 - shtool库函数
 - 使用库
 
+## 第18章　图形化桌面环境汇总的脚本编程
 
+### 18.1 创建文本菜单
+
+- 创建菜单布局
+
+  - clear 命令清空
+  - echo  -e 　　echo -e "1.\tDisplay the space"
+  - echo -en "1.\tDisplay the space"　　-en去掉末尾的换行符
+  - read -n 选项  -n限制只读取一个字符　read -n 1 option　　　　　　　　
+
+- 创建菜单函数
+
+- 添加菜单逻辑
+
+- 整合shell脚本菜单
+
+- 使用select命令
+
+  - ```shell
+    select variable in list
+    do
+    	commands
+    done
+    ```
+
+  - list 参数是由空格分割的文本选项列表
+
+  - 存储在变量中的结果值是整个文本字符串而不是跟菜单选项相关联的数字
+
+### 18.2 制作窗口
+
+- dialog包能够用ANSI转义字符在文本环境中创建标准的窗口对话框
+- dialog包
+  - dialog   --widget  parameters     widget是部件名　　parameters定义了窗口的大小以及部件需要的文本
+  - dialog命令会将数据发送到STDERR
+- msgbox部件
+  - dialog --title Testing --msgbox "Thi is a test" 10 20
+- yesno部件
+  - dialog --title "Please answer"  --yesno "Is this thing on?"  10  20
+  - dialog命令的退出状态码会根据用户选择的按钮来设置
 
 
 
