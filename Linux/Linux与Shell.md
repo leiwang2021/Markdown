@@ -1776,43 +1776,84 @@ esac
   - i
   - a
   - sed '3i This is a inserted line.' data1.txt 
+
 - 修改行
 
-  
+  - c
 
-  
+- 转换命令
+
+  - y 
+  - sed  'y/123/789'  data2.txt  将字符值进行一对一的映射
+
+- 回顾打印
+
+  - 打印行
+    - p    
+    - sed -n '2,3p'  data6.txt
+  - 打印行号
+    - 等号命令会打印在数据流中的当前行号
+    - sed '='  data1.txt
+  - 列出行
+    - l
+    - sed  -n  'l'  data9.txt
+
+- 使用sed 处理文件
+
+  - 写入文件
+
+    - sed  '1,2w  test.txt'  data6.txt
+
+  - 从文件读取数据
+
+    - r
+    - 将一个独立文件中的数据插入到数据流中
+    - sed '3r data12.txt'  data6.txt
+
+    
+
+    
+
+    
+
+       
 
 
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
