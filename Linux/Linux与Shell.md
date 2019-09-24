@@ -1613,6 +1613,174 @@ esac
 - yesno部件
   - dialog --title "Please answer"  --yesno "Is this thing on?"  10  20
   - dialog命令的退出状态码会根据用户选择的按钮来设置
+- inputbox部件
+  - dialog命令会将文本字符串的值发送给STDERR
+  - dialog --inputbox "Enter your age:" 10 20 2>age.txt
+- textbox部件
+  - dialog --textbox /etc/passwd 15 45
+- menu部件
+  - dialog --menu "Sys Admin Menu"  20  30 10  1  "Display disk space "   2  "Display users"  3  "Dispaly memory usage"  2>test.txt
+- fselect部件
+  - dialog --title "Select a file"  --fselect  $HOME/  10 50 2>file.txt
+- 在脚本中使用dialog命令
+  - 如果有Cancel或NO按钮，检查dialog命令的退出状态码
+  - 重定向STDERR来获得输出值
+
+
+
+### 18.4 使用图形
+
+- KDE环境
+- GNOME环境
+  - gdialog
+  - zenity
+    - zenity命令会将值返回到STDOUT中
+    - zenity --file-selection  显示目录窗口，选中后返回路径
+
+## 第19 章　初识sed和gawk
+
+### 19.1 文本处理
+
+- sed编辑器(流编辑器)
+
+  - 在编辑器处理数据之前基于预先提供的一组规则来编辑数据流
+  - 在流编辑器将所有命令与一行数据匹配完毕后，它会读取下一行数据并重复这个过程
+  - sed options script file
+    - -e script
+    - -f  file
+    - -n
+  - 在命令行定义编辑器命令
+    - 默认情况下，将指定的命令应用到STDIN输入流上
+    - s命令，第二个文本字符串替换第一个文本字符串　　echo "This is a test" | sed 's/test/big test/'
+    - sed编辑器并不会修改文本文件的数据，它只会将修改后的数据发送到STDOUT
+  - 在命令行使用多个编辑器命令
+    - 采用-e选项
+    - sed -e 's/brown/green/; s/dog/cat/'  data1.txt
+    - 命令之间用分号分开
+    - bash shell的次提示符，只要输入第一个单引号标示起始，会提示输入更多命令，直到结束的单引号
+  - 从文件中读取编辑器命令
+    - sed -f script1.sed data1.txt      script1.sed 的每行是一条命令
+
+- gawk程序
+
+  - 提供一个类编程环境来修改和重新组织文件中的数据
+
+  - gawk程序是Unix中的原始awk程序的GNU版本
+
+  - 它提供了一种编程语言而不只是编辑器命令
+
+  - gawk命令格式
+
+    - gawk options program file
+
+  - 从命令行读取程序脚本
+
+    - gawk程序脚本用一对花括来定义，还必须将脚本放到单引号中
+    - gawk '{print "hello world"}'
+    - gawk程序会从STDIN接收数据
+    - CTRL+D会在bash中产生一个EOF字符
+
+  - 使用数据字段变量
+
+    - gawk会将如下变量分配给它在文本行中发现的数据字段　　$0代表整行　　$n代表第n个数据字段
+    - 每个数据字段通过字段分隔符
+    - gawk '{print $1}' data2.txt
+    - -F可以指定分隔符
+    - gawk -F:  '{print $1}'   /etc/passwd
+
+  - 在程序脚本中使用多个命令
+
+    - 在命令行中多条命令用分号分开
+    - echo "My name is Rich"   |  gawk '{$4="Christine" ;  print $0}'
+
+  - 从文件中读取程序
+
+    -  {print $1 "'s hoem directory is " $6}
+
+    - gawk -F: -f script2.gawk /etc/passwd
+
+    - ```shell
+       {
+           text="'s home directory is "
+           print $1 text $6
+       }
+      ```
+
+  - 在处理数据前运行脚本
+
+    - BEGIN会强制在读取数据前执行BEGIN关键字后指定的程序脚本
+    - gawk 'BEGIN {print  "Hello World"}'
+
+  - 在处理数据后运行脚本
+
+    - END关键字允许指定在读取数据后执行它
+
+    - ```shell
+       BEGIN{
+       print "The latest list of users and shells"
+       print "UserID \t Shell"
+       print"--------\t----------"
+       FS=":"
+       }
+       
+       {
+           print $1 "      \t"    $7
+       }
+       
+       END{
+       print "This concludes the listing"
+       }
+      ```
+
+  
+
+### 19.2 sed编辑器基础
+
+  - 更多的替换选项
+
+    - 替换标记
+      - 默认情况下它只替换每行中出现的第一处
+      - 替换标记会在替换命令字符串之后设置
+      - s/pattern/replacement/flags
+      - 4种可用的替换标记
+        - 数字
+        - g
+        - p　　会打印与替换命令中指定的模式匹配的行
+        - w file  只有包含匹配模式的行才会保存在指定的输出文件中
+    - 替换字符
+      - 可以用!作为字符串分隔符　　
+      - sed 's!/bin/bash!/bin/csh!'  /etc/passwd
+
+- 使用地址
+
+  - 只想将命令作用于特定行，则必须使用行寻址
+  - 以数字形式表示行区间　　[address] command
+    - sed '2s/dog/cat/'  data1.txt
+    - sed '2,3s/dog/cat/'  data1.txt
+    - sed '2,$s/dog/cat/'  data1.txt       $表示到所有行
+    - sed '2s/dog/cat/'  data1.txt
+  - 用文本模式来过滤出行
+    - /pattern/command
+    - sed  '/leiwang/s/bash/csh/'  /etc/passwd      只作用到匹配文本模式上的行
+  - 命令组合
+    - 如果需要在单行上执行多条命令，可以用花括号将多条命令组合到一起
+    - sed '2{s/fox/elephant/; s/dog/cat/}' data1.txt
+
+- 删除行
+
+  - 'd'
+  - sed '3d' data1.txt         寻址模式
+
+- 插入和附加文本
+
+  - i
+  - a
+  - sed '3i This is a inserted line.' data1.txt 
+- 修改行
+
+  
+
+  
 
 
 

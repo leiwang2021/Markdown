@@ -729,6 +729,56 @@
 - 在一个class的constructor中，经由构造中的对象来调用一个virtual function, 其函数实例应该是在此class中有作用的那个
 - vptr初始化操作应该在base class constructors调用操作之后，但是在程序员供应的代码或是member initialization list中所列的members初始化操作之前
 
+### 5.3 对象复制语意学
+
+- 拒绝把一个class object指定给另一个class object
+  - 将copy assignment operator 声明为private
+  - 不提供函数定义，则一旦某个member function或friend企图影响一份拷贝，程序在链接时就会失败
+- 只有默认行为导致的语意不安全或不正确时，我们才需要设计一个copy assignment operator
+- class有bitwise copy语意时，implicit copy assignment operator不会被合成出来，赋值操作由bitwise copy完成，并没有implicit copy assignment operator被调用
+- 不会表现出bitwise copy语意的四种情况
+  - base class有一个copy assignment operator
+  - member object有一个copy assignment operator
+  - virtual function
+  - 继承自一个virtual base class
+- copy assignment operator在虚拟继承情况下行为不佳，需要小心地设计和说明
+  - 尽可能不要允许一个virtual base class的拷贝操作
+  - 不要在任何virtual base class中声明数据
+
+### 5.3 对象的效能
+
+- bitwise copy语意
+  - struct
+  - class
+  - 单一继承的class
+  - 多重继承的class
+- 单层虚拟继承
+  - 不再有bitwise copy语意
+  - 合成型的inline copy constructor和copy assignment operator被产生出来，导致效率成本上的增加
+- 有着封装味道并有virtual function的class
+  - 合成型的inline copy constructor和copy assignment operator被产生出来，导致效率成本上的增加
+
+
+
+### 5.5 析构语意学
+
+- 如果class没有定义destructor,那么只有在class内含的member object(或base class)有destructor的情况下，编译器才会自动合成一个，否则不会合成，甚至它拥有一个虚函数，即使虚拟继承
+- 没有任何理由说在delete一个对象之前先得将其内容清除干净，也不需要归还任何资源，因此，也不一定需要一个destructor
+- 一个由程序员定义的destructor被扩展的方式类似constructors被扩展的方式，但顺序相反
+  - destructor的函数本体首先被执行
+  - member class objects如果有destructors,以声明顺序的相反顺序调用
+  - vptr被重新设定，指向base class的virtual table
+  - 上层的nonvirtual base class如果有destructor,被调用
+  - 如果有virtual base class拥有destructor,目前的是最尾端的class,会以其原来的构造顺序的相反顺序被调用
+
+
+
+## 第六章　执行期语意学
+
+
+
+
+
 
 
 

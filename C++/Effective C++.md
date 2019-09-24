@@ -594,7 +594,50 @@
 
 
 
+## 第六章　继承与面向对象设计
 
+### 条款32 确定你的public 继承塑模出is-a关系
+
+- 公开继承意味着  is-a 的关系
+- 适用于base classes身上的每一件事情一定也适用于derived classes身上，因为每一个derived class对象也都是一个base class对象
+
+### 条款33 避免遮掩继承而来的名称
+
+- derived class作用域被嵌套在base class作用域内
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot%20from%202019-09-23%2017-10-33.png)
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot%20from%202019-09-23%2017-16-09.png)
+- derived classes内的名称会遮掩base classes内的名称
+- 为了让被遮掩的名称再见天日，可使用using 声明式或转交函数
+
+
+
+### 条款34 区分接口继承和实现继承
+
+- 声明一个pure virtual 函数的目的是为了让derived classes只继承函数接口
+- 声明impure virtual函数的目的是为了让derived classes继承该函数的接口和缺省实现
+- pure virtual函数必须在derived classes中重新声明，但它们也可以拥有自己的实现
+- 声明non-virtual函数的目的是为了令derived calsses继承函数的接口及一份强制性实现
+- 总结
+  - **pure virtual函数只具体指定接口继承**
+  - **impure virtual函数具体指定接口继承及缺省实现继承**
+  - **non-virtual函数具体指定接口继承以及强制性实现继承**
+
+### 条款35  考虑virtual函数以外的选择
+
+#### 借由non-virtual interface手法实现Template Method模式
+
+- 通过public non-virtual成员函数间接调用private virtual函数
+
+#### 借由Function Pointers实现Strategy模式
+
+#### 借由tr1::function 完成Strategy模式
+
+- std::tr1::function<int (const GameCharacter &)>  指向函数的泛化指针
+
+#### 古典的Strategy模式
+
+- virtual函数的替代方案包括NVI手法及Strategy设计模式的多种形式
+- tr1::function对象的行为就像一般函数指针
 
 
 

@@ -607,19 +607,28 @@
 
 
 
-## 第六章　继承与面向对象设计
 
-### 条款32 确定你的public 继承塑模出is-a关系
 
-- 公开继承意味着  is-a 的关系
-- 适用于base classes身上的每一件事情一定也适用于derived classes身上，因为每一个derived class对象也都是一个base class对象
+### 4.9 slist
 
-### 条款33 避免遮掩继承而来的名称
+- 概述
 
-- derived class作用域被嵌套在base class作用域内
-- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-23 17-10-33.png)
+  - SGI STL提供了一个单向链表
+  - slist的迭代器属于单向的Forward Iterator
+  - 插入、接合、移除等操作不会造成原有的迭代器失效
+  - 除了slist起点附近的区域之外，在其他位置上采用insert或erase操作函数，都属于不智之举，提供insert_after()和erase_after()
+  - slist不提供push_back,只提供push_front
 
-- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-23 17-16-09.png)
+- slist的节点
 
-- derived classes内的名称会遮掩base classes内的名称
-- 为了让被遮掩的名称再见天日，可使用using 声明式或转交函数
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-24 18-42-11.png)
+
+- slist的迭代器
+
+- slist的数据结构
+
+- slist的元素操作
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-24 19-08-41.png)
+
+  - 
