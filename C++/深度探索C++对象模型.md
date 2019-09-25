@@ -775,11 +775,27 @@
 
 ## 第六章　执行期语意学
 
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-25 13-42-58.png)
 
 
 
 
 
+### 6.1 对象的构造和析构
+
+- 如果一个区段或函数有一个以上的离开点，destructor必须被放在每一个离开点
+- 一般而言应把object尽可能放置在使用它的那个程序区段附近，这样可以节省非必要的对象产生操作和摧毁操作
+
+#### 全局对象
+
+- **C++程序所有的global objects都被放置在程序的data segment中，如果显式指定给它一个值，此objects将以该值为初值，否则object所配置到的内存内容为0**,**它需要静态的初始化操作和内存释放操作**
+- class obejct在编译时期可以被放置于data segment中并且内容为0,但constructor一直要到程序启动时才会实施
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-25 13-55-15.png)
 
 
 
+
+
+#### 局部静态对象
+
+- constructor，destructor必须只能施行一次，即使函数被调用多次

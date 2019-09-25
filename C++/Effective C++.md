@@ -641,6 +641,65 @@
 
 
 
+### 条款36 绝不重新定义继承而来的non-virtual函数
+
+- 静态绑定
+  - 由于PB被声明为一个pointer-to-B,通过PB调用的non-virtual函数永远是B定义的版本，即使PB指向一个类型为B派生之class的对象
+- 动态绑定
+  - 虚函数是动态绑定的
+
+### 条款37 绝不重新定义继承而来的缺省参数值
+
+- 缺省参数值是静态绑定
+
+- 对象的所谓静态类型，就是它在程序中被声明时所采用的类型
+
+  ```c++
+  Shape* ps;   
+  Shape* pc=new Circle;
+  Shape* pr=new Rectangle;
+  //ps和pc和pr的静态类型都是Shape*
+  ```
+
+- 对象所谓的动态类型，就是目前所指对象的类型
+
+  - pc的动态类型是Circle*   pr的动态类型是Rectangle*,ps没有动态类型
+  - **Virtual函数系动态绑定而来，调用一个virtual函数时，取决于发出调用的那个对象的动态类型**
+
+- virtual函数是动态绑定的，而缺省参数值是静态绑定的，可能会在调用一个定义于derived class内的virtual函数的同时，却使用base class为它指定的缺省参数值
+
+### 条款38 通过复合塑模出has-a或根据某物实现出
+
+- set的实现往往招致每个元素耗用三个指针的额外开销，因为sets通常以平衡二叉树实现而成
+- 实现sets的方法太多了，其中一种便是在底层采用linked lists
+- Set对象可根据一个list对象实现出来，是has-a的关系
+
+
+
+### 条款39 明智而审慎地使用private继承
+
+- private继承
+  - 如果classes之间的继承关系是private,编译器不会自动将一个derived class对象转换为一个base class对象
+  - 由private base class继承而来的所有成员，在derived class中都会变成private属性
+  - **private继承意味着根据某物实现出**
+- 尽可能使用复合，必要时才使用private继承，主要是当protected成员或virtual函数牵扯进来时，当一个意欲成为derived class者想访问一个意欲成为base class的protected成分，或为了重新定义一或多个virtual函数，但这时候两个classes之间的概念关系是根据某物实现
+- public继承加复合　　　private继承
+- C++裁定凡是独立(非附属)对象都必须有非零大小，这个约束不适用于derived class对象内的base class成分
+- 空白基类最优化，只在单一继承下才可行，private继承可以造成empty base 最优化
+
+
+
+### 条款40 明智而审慎地使用多重继承
+
+- virtual base class
+  - 非必要不要使用virtual bases
+  - 如果必须使用，尽可能避免在其中放置数据，就不需要担心这些classes身上的初始化和赋值带来的诡异事情
+- 多重继承比单一继承复杂，它可能导致新的歧义性，以及对virtual继承的需要
+- virtual继承会增加大小、速度、初始化(及赋值)复杂度等等成本，如果virtual base classes不带任何数据，将是最具实用价值的情况
+- 多重继承的确有正当用途，其中一个情节涉及 public继承某个Interface class和private继承某个协助实现的class的两相组合
+
+
+
 
 
 
