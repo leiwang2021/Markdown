@@ -700,6 +700,49 @@
 
 
 
+## 第七章　模板与泛型编程
+
+### 条款41 了解隐式接口和编译期多态
+
+- 面向对象总是以显式接口和运行期多态解决问题
+- 隐式接口和编译期多态在Templates及泛型编程的世界更常见
+  - 由template中的T决定支持哪一种接口
+  - 以不同的template参数具现化function templates会导致调用不同的函数，这就是编译期多态
+- classes和templates都支持接口和多态
+- 对classes而言接口是显式的，以函数签名为中心，多态则是通过virtual函数发生于运行期
+- 对templates参数而言，接口是隐式的，基于有效表达式。多态则是通过template具现化和函数重载解析符发生于编译期
+
+### 条款42 了解typename的双重含义
+
+- 当我们声明template类型参数，class和typename的意义完全相同
+- template内出现的名称如果相依与某个template参数，称之为从属名称，如果从属名称在class内呈嵌套状，称为**嵌套从属名称**
+- 非从属名称
+- 如果解析器在template中遭遇一个嵌套从属名称，它便假设这名称不是个类型，除非你告诉它是，所以缺省情况下嵌套从属名称不是类型
+- typename C::const_iterator  iter(container.begin())
+- typedef typename std::iterator_traits\<IterT>::value_type  value_type;
+- 请使用关键字typename 标识嵌套从属类型名称，但不得在base class lists或member initialization list内以它作为base class修饰符
+
+
+
+### 条款43 学习处理模板化基类内的名称
+
+- C++往往拒绝在templatized base class(模板化基类)内寻找继承而来的名称
+  - 解决办法1  在base class函数调用动作之前加上this->
+  - 使用using 声明式
+  - 明确指出被调用的函数处于base class内
+- 模板化基类内的函数名称会被derived classes遮盖
+
+### 条款44 将与参数无关的代码抽离templates
+
+- 必须训练自己去感受当template被具现化多次时可能发生的重复
+- 由非类型模板参数可能带来代码膨胀，类型参数也可能带来膨胀
+- 总结
+  - Templates生成多个classes和多个函数，所有任何template代码都不应该与某个造成代码膨胀的template参数产生相依关系
+  - 因非类型模板参数而造成的代码膨胀，往往可以消除，做法是以函数参数或class成员变量替换template参数
+  - 因类型参数而造成的代码膨胀，往往可降低，做法是让带有完全相同二进制表述的具现类型共享实现代码
+
+
+
 
 
 

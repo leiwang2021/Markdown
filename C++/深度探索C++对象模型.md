@@ -799,3 +799,66 @@
 #### 局部静态对象
 
 - constructor，destructor必须只能施行一次，即使函数被调用多次
+
+#### 对象数组
+
+- vec_new()　　把默认构造器施行于class objects所组成的数组的每一个元素身上
+- vec_vnew()
+- vec_delete()
+- vec_vdelete()
+
+#### Default constructors和数组
+
+### 6.2 new和delete运算符
+
+- new运算符的两个步骤
+  - 通过适当的_new运算符函数实例，配置所需的内存
+  - 将配置得来的对象设立初值
+- delete类似，如果指针是0,C++要求delete运算符不要有操作
+- new运算符实际上总是以标准的C malloc()完成的
+- delete运算符也是以标准的C free()完成的
+
+#### 争对数组的new语意
+
+- ```c++
+  int* p_array=new int[5];  //没有构造器，只是单纯地获得内存
+  //vec_new()不会被调用，new运算符会被调用
+  int* p_array=(int*)_new(5*sizeof(int));
+  ```
+
+- ```c++
+  Point3d* p_array=new Point3d[10];  //有默认构造器时，会被编译为下面的形式
+  Point3d* p_array;
+  p_array=vec_new(0,sizeof(Point3d),10,&Point3d::Point3d,&Point3d::~Point3d);
+  ```
+
+- delete []  p_array   只有在中括号出现时，编译器才寻找数组的维度
+
+- **施行于数组上的destructor,是根据交给vec_delete()函数的被删除之指针类型的destructor, 最好避免以一个base class指针指向一个derived class objects所组成的数组**
+
+
+
+#### placement operator new的语意
+
+- Point2w* ptw=new(arena) Point2w;   //其中arena指向内存中的一个区块，它只要将arena所指的地址传回即可
+
+- Placement new operator所扩充的另一半是将Point2w constructor自动施行于arena所指的地址上
+
+- ```c++
+  Point2w* ptw=(Point2w*) arena;
+  if(ptw!=0)
+  {
+      ptw->Point2w::Point2w();
+  }
+  ```
+
+- ```c++
+  Point2w* p2w=new(arena) Point2w;
+  p2w->~Point2w;   //显式地调用destructor并保存存储空间以便再使用
+  p2w=new(arena)Point2w;
+  ```
+
+- 一般而言，placement new operator并不支持多态，被交给new的指针，应适当地指向一块预先配置好的内存，如果derived class比其base class，可能会导致严重的破坏
+
+
+

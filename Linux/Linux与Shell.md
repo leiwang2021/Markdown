@@ -1855,7 +1855,105 @@ esac
   - 使用[]来定义一个字符组　　sed -n '/[ch]at/p'  data6
   - 可以在单个表达式中使用多个字符组
 - 排除型字符组
+
   - 反转字符组的作用，寻找组中没有的字符，在字符组的开头加个脱字符^     \[^ch]
+- 区间
+
+  - sed -n '/^\[0-9]\[0-9][0-9]\[0-9]$/p' data8
+  - sed  -n '/\[c-h]at/p'  data6
+  - 多个不连续的区间　　\[a-ch-m]
+- 特殊的字符组
+  - \[\[:alpha:]]  匹配任意字母字符
+- 星号
+  - 在字符后面放置星号表明必须在匹配模式的文本中出现0次或多次
+  - echo "ieek" | sed -n '/ie*k/p'
+  - 将点号特殊字符和星号特殊字符组合起来，这个组合能够匹配任意数量的任意字符
+  - echo "this is a regular pattern expression" | sed -n "/regular.*expression/p"
+  - 星号还可以用在字符组上
+
+### 20.3 扩展正则表达式
+
+- 可用在gawk程序脚本中的较常见的ERE模式符号
+- 问号
+  - 问号表示前面的字符可以出现0次或1次
+  - 可以将问号和字符组一起使用
+  - echo "bet" | gawk '/b[ae]?t/{print $0}'
+- 加号
+  - 加号表明前面的字符可以出现1次或多次，但必须至少出现1次
+  - echo "beeeeet" | gawk '/b[ae]+t/{print $0}'
+- 使用花括号
+  - 允许为可重复的正则表达式指定一个上限，称为间隔
+  - m　 正则表达式准确出现m次
+  - m,n　   正则表达式至少出现m次，至多n次
+  - echo "beet" | gawk --re-interval '/be{1,2}t/{print $0}'
+  - 间隔模式匹配同样适用于字符组
+- 管道符号
+  - expr1|expr2    用逻辑或方式
+- 表达式分组
+  - 正则表达式可以用圆括号进行分组，该组会被认为是一个标准字符
+  - echo "Sat" | gawk '/Sat(urday)?/{print $0}'
+
+### 20.4 正则表达式实战
+
+- 目录文件计数
+
+  - echo $PATH | sed 's/:/ /g'
+
+  - ```shell
+     #!/bin/bash
+     
+     mypath=$(echo $PATH | sed 's/:/ /g')
+     count=0
+     for directory in $mypath
+     do
+         check=$(ls $directory)
+         for item in $check
+         do
+             count=$[ $count+1 ]
+         done
+         echo "$directory - $count"
+         count=0
+     done 
+    ```
+
+- 验证电话号码
+
+- 解析邮件地址
+
+  - ^([a-zA-z0-9_\\-\\.\\+]+)@
+  - ([a-zA-Z0-9_\\-\\.]+)
+  - ^([a-zA-z0-9_\\-\\.\\+]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$
+
+
+
+## 第23章　使用其他shell
+
+- bash shell是Linux发行版中最广泛使用的shell
+
+### 23.1 什么是dash shell
+
+- Ubuntu发行版将bash shell用作默认的交互shell,但将dash shell用作默认的/bin/sh  shell,  将/bin/sh文件链接到了shell程序/bin/dash
+- 在Unix世界中，默认shell一直是/bin/sh
+
+
+
+### 23.2 dash shell的特性
+
+- dash 命令行参数
+- dash环境变量
+  - 默认环境变量
+  - 位置参数
+  - 用户自定义的环境变量
+  - dash shell不支持数组
+- dash 内建命令
+
+### 23.3 dash 脚本编程
+
+### 23.4 zsh shell
+
+- 每一种shell都包含一组内建命令，内建命令已经在内存中了，随时可用，zsh shell提供了一组核心内建命令，提供了添加额外命令模块的能力
+
+### 23.5 zsh shell的组成
 
   
 

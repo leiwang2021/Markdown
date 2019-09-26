@@ -671,5 +671,79 @@
   - 双旋转
     - 左右、右左
 
-  
 
+### 5.2 RB-tree(红黑树)
+
+- 一个被广泛运用的平衡二叉树
+- 满足如下规则:
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-26 13-42-54.png)
+
+- **根据规则4,新增节点必须为红，根据规则3,新增节点之父必须为黑**
+
+- 插入节点
+
+  - 破坏规则后必须旋转树形并改变节点颜色
+
+  - 状况1:
+
+    ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-26 13-51-58.png)
+
+  - 状况2:
+
+    ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-26 13-54-39.png)
+
+    
+
+  - 状况3:
+
+    ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-26 13-57-41.png)
+
+     
+
+  - 状况4:
+
+    ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-26 13-59-48.png)
+
+    
+
+    
+
+- 一个由上而下的程序
+
+- RB-tree的节点设计
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-26 18-47-48.png)
+
+- RB-tree的迭代器
+
+  - 双层节点结构和双层迭代器结构
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-26 18-51-03.png)
+
+  - RB-tree迭代器属于双向迭代器，不具备随机定位能力
+
+- RB-tree的数据结构
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-26 19-16-25.png)
+
+- RB-tree的构造与内存管理
+
+  - 以现有的RB-tree复制一个新的RB-tree
+  - 产生一颗空空如也的树
+  - 最需要的是边界情况的发生，SGI STL特别为根节点再设计一个父节点，名为header
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-26 19-22-45.png)
+
+  - 每当插入新节点时，不但要依照RB-tree的规则来调整，并且维护header的正确性，使其父节点指向根节点，左子节点指向最小节点，右子节点指向最大节点
+
+- RB-tree的元素操作
+
+  - insert_equal()
+  - insert_unique()
+  - __reb_tree_rebalance()
+  - 寻找RB树中是否有键值为k的节点
+
+- 红黑树比AVL的优势所在
+
+  - 红黑是用非严格的平衡来换取增删节点时候旋转次数的降低，任何不平衡都会在三次旋转之内解决，而AVL是严格平衡树，因此在增加或者删除节点的时候，根据不同情况，旋转的次数比红黑树要多
+  - 如果插入一个node引起了树的不平衡，AVL和RB-Tree都是最多只需要2次旋转操作，即两者都是O(1)；但是在删除node引起树的不平衡时，最坏情况下，AVL需要维护从被删node到root这条路径上所有node的平衡性，因此需要旋转的量级O(logN)，而RB-Tree最多只需3次旋转，只需要O(1)的复杂度。
+  - 其次，AVL的结构相较RB-Tree来说更为平衡，在插入和删除node更容易引起Tree的unbalance，因此在大量数据需要插入或者删除时，AVL需要rebalance的频率会更高。因此，RB-Tree在需要大量插入和删除node的场景下，效率更高。自然，由于AVL高度平衡，因此AVL的search效率更高。
+  - map的实现只是折衷了两者在search、insert以及delete下的效率。总体来说，RB-tree的统计性能是高于AVL的。
