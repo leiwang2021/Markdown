@@ -862,3 +862,138 @@
 
 
 
+### 6.3 临时性对象
+
+- ```c++
+  T operator+(const T&, const T&);
+  T a,b;
+  T c=a+b;
+  //1. 编译器产生一个临时性对象，放置a+b结果，再调用T的copy constructor，把该临时性对象当作c的初始值
+  //2. 直接以拷贝构造的方式，将a+b的值放在c中
+  //3. NRV优化可能实施，直接导致在上述c对象中求表达式的结果
+  ```
+
+- ```c++
+  T c=a+b;  //总是比下面的操作更有效率地编译器转换
+  c=a+b;
+  ```
+
+- 临时对象被摧毁，应该是对完整表达式求值过程中的最后一个步骤。即任何一个子表达式所产生的任何一个临时对象，都应该在完整表达式被求值完成后，才可以毁去　
+
+- 凡持有表达式执行结果的临时性对象，应该留存到object的初始化操作完成为止
+
+- ```c++
+  const char* programversion=program+version;
+  //这个初始化操作保证失败，programversion指向未定义的heap内存
+  String temp;
+  operator+(temp,program,version);
+  programversion=temp.String::operator char*();
+  temp.String::~String;
+  ```
+
+- 如果一个临时性对象被绑定于一个reference,对象将残留，直到被初始化之reference的生命结束，或直到临时对象的生命范畴结束
+
+## 第七章　站在对象模型的尖端
+
+### 7.1 template
+
+- 使用实例化表示进程将真正的类型和表达式绑定到template相关形式参数上头
+
+#### template的实例化行为
+
+- ```c++
+  Point<float>* ptr=0;  //一个指向class object的指针，本身并不是一个class object,不会被实例化
+  const Point<float> &ref=0;
+  //内部扩展
+  Point<float> temporary(float(0));
+  const Point<float> &ref=temporary;  //会实例化
+  
+  ```
+
+- member function只有被使用的时候，C++　standard才要求它们被实例化
+
+#### template 的错误报告
+
+- 所有与类型有关的检验，如果牵扯到template参数，都必须延迟到真正的实例化操作发生，才的为之
+
+#### template中的名称决议
+
+- template之中，对于一个nonumber name决议结果，是根据这个name的使用是否与用以实例化该template的参数类型有关而决定的。如果互不相关，就以 scope of the template declaration来决定name. 如果其使用互有关联，就以scope of the template instantiation来决定name
+
+#### member function的实例化行为
+
+
+
+### 7.2 异常处理
+
+- 执行期类型识别　RTTI
+
+#### exception handling 快速检阅
+
+- throw
+- catch
+- try
+- 当一个exception被抛出时，堆栈中的每一个函数调用被推离，在每一个函数被推离堆栈之前，函数的local class objects的destructor会被调用
+- 如果new运算符抛出一个exception,那么就不需要配置heap中的内存，constructor也不需要被调用，也不用调用delete. 如果在constructor中发生exception, 此时内存配置已经完成，那么对象将被自动析构掉，heap内存也会被释放掉，不需要调用delete
+
+
+
+#### 对于exception handing的支持
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-28 10-27-21.png)
+
+- 决定throw 是否发生在一个try区段中
+- 将exception的类型和每一个catch子句的类型作比较
+  - 对于每一个被抛出来的exception,编译器必须产生一个类型描述器
+- 当一个实际对象在程序执行时被抛出，会发生什么事?
+  - 当一个exception被抛出时，exception object会被产出来并被放置在相同形式的exception数据堆栈中，从throw端传给catch子句的，是exception object的地址、类型描述符
+
+### 7.3 执行期类型识别(RTTI)
+
+- downcast(向下转换)
+- 保证安全的向下转换操作
+  - 欲支持type-safe downcast,在object空间和执行时间上都需要一些额外负担
+    - 需要额外的空间以存储类型信息，通常是一个指针，指向某个类型信息结点
+    - 需要额外的时间以决定执行期的类型
+  - C++的RTTI机制提供了一个安全的downcast设备，但只对那些展现多态(使用继承和动态绑定)的类型有效
+  - 所有多态classes的objects都维护了一个vptr,只要把与该类相关的RTTI　object地址放进virtual table中，这一指针只需被设定一次，它是被编译器静态设定的
+- 保证安全的动态转换
+  - dynamic_cast运算符可以在执行期决定真正的类型，类型描述器必须在执行期通过vptr取得
+  - dynamic\<pfct>(pt) 比static cast昂贵，但安全
+
+- references并不是Pointers
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-28 10-54-32.png)
+
+  - 当dynamic_cast运算符施行于一个reference时，不能提供对等于指针情况下的那一组true/false
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-28 10-56-41.png)
+
+- Typeid运算符
+
+  - typeid运算符返回一个const reference,类型为type_info,   ==是一个被重载的函数
+
+  - ```c++
+    typeid(rt)==typeid(fct);
+    bool type_info::operator==(const type_info &) const;
+    ```
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-28 10-59-53.png)
+
+- RTTI提供的type_info对于exception handing的支持是必要的，但再加上一些type_info derived classes，就可以在exception发生时提供关于指针、函数、类等更详细的信息
+
+- 事实上type_info objects也适用于内建类型，以及非多态的使用者自定类型
+
+  - ```c++
+    int ex_errno;
+    throw ex_errno;
+    //int 也有它自己的type_info object
+    int *ptr;
+    if(typeid(ptr)==typeid(int*))
+    ```
+
+  - typeid(double)这样的会传回一个const type_info&,这时的type_info object是静态取得的，而非执行期取得
+
+### 7.4 效率有了，弹性呢?
+
+- 动态共享函数库
+- 共享内存

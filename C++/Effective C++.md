@@ -1,3 +1,7 @@
+
+
+
+
 # Effective C++
 
 - C++的四种编程范型：　procedural-based   object-based    object-oriented    generics
@@ -743,6 +747,209 @@
 
 
 
+### 条款45 运用成员函数模板接受所有兼容类型
+
+- 智能指针: 行为像指针的对象
+- 真实指针支持:
+  - derived class指针可以隐式转换为base class指针
+  - 指向non-const对象的指针可以转换为指向const对象
+- 如果以带有base-derived 关系的B,D类型分别具现化某个template, 产生出来的两个具现体并不带有base-derived关系
+- member function template
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-27 10-51-29.png)
+
+- 有了一个泛化构造函数，这个构造函数只在其所获得的实参适当兼容类型时才通过编译
+- 总结
+  - 请使用member function templates生成可接受所有兼容类型的函数
+  - 如果你声明member templates用于泛化copy构造或泛化assignment操作，还是需要声明正常的copy构造函数和copy assignment操作符
+
+### 条款46 需要类型转换时请为模板定义非成员函数
+
+- 必须先为相关的function template推导出参数类型，然后才可将适当的函数具现化出来
+- 在template实参推导过程中从不将隐式类型转换函数纳入考虑
+- class template并不依赖于template实参推导
+- 当我们编写一个class template,而它所提供之与此template相关的函数支持所有参数之隐式类型转换时，请将那些函数定义为class template内部的friend函数
 
 
+
+### 条款47 请使用traits classes表现类型信息
+
+- traits 允许在编译期间取得某些类型信息
+- traits必须能够施行于内置类型，因此类型的traits信息必须位于类型自身之外，标准技术是放在一个template或其特化版本中
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-27 11-29-59.png)
+
+- 编译期核定比运行期核定更好
+- 重载可以实现编译期核定
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-27 11-34-24.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-27 13-12-39.png)
+
+- 如何使用traits class
+  - 建立一组重载函数(劳工)或函数模板，彼此间的差异只在于各自的traits参数。令每个函数实现码与其接受之traits信息相应和
+  - 建立一个控制函数(工头)或函数模板，它调用上述那些劳工函数，并传递traits class所提供的信息
+- TR1一共为标准C++添加了50个以上的traits classes
+- traits class使得类型相关信息在编译期可用，它们以templatesh和templates 特化完成实现
+- 整合重载技术后，traits class有可能在编译期对类型执行if...else测试
+
+### 条款48 认识template元编程
+
+- template metaprogramming(TMP,模板元编程)是编写template-based C++程序并执行于编译期的过程
+- 让事情更容易
+- 将工作从运行期转移到编译期
+- 编译时间变长了
+- 编译器必须确保所有源码都有效，纵使是不会执行起来的代码
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-27 13-30-47.png)
+- TMP可将工作由运行期移往编译期，因而得以实现早期错误侦测和更高的执行效率
+- TMP可被用来生成基于政策选择组合的客户定制代码，也可用来避免生成对某些特殊类型并不适合的代码
+
+
+
+## 第八章　定制new和delete
+
+### 条款49 了解new-handler的行为
+
+- 当operator new抛出异常以反映一个未获得满足的内存需求之前，它会调用new-handler,使用set_new_handler
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-28 11-20-42.png)
+
+- 末端的throw()是异常明细，表明该函数不抛出任何异常
+
+- set_new_handler的参数指向operator new无法分配足够内存时该被调用的函数，返回指向set_new_handler被调用前正在执行的那个new_handler函数
+
+- 当operator new 无法满足内存申请时，它会不断调用new-handler函数，直到找到足够内存
+
+- 一个new-hadler函数必须做以下事情
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-28 11-22-38.png)
+
+- 实现class专属之new-handlers
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 10-27-30.png)
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 10-27-55.png)
+
+- 将global new-handler视为资源，并运用资源管理对象
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 10-35-57.png)
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-28 11-31-17.png)
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 10-38-26.png)
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 10-39-25.png)
+
+- 继承自NewhandlerSupport的每一个class,拥有实体互异的NewHandlerSupport复件(更准确的说是其static 成员变量currentHadnler),Template机制会为每一个T生成一个currentHandler
+- Notrhrow new是一个颇为局限的工具，因为它只适用于内存分配，后继的构造函数调用还是可能抛出异常
+
+
+
+### 条款50 了解new和delete的合理替换时机
+
+- 用来检测运用上的错误
+- 为了强化效能，编译器自带的operator news 和delete比较中庸
+- 为了收集使用上的统计数据
+- 为了增加分配和归还的速度
+- 为了降低缺省内存管理器带来的空间额外开销
+- 为了弥补缺省分配器中的非最佳对齐
+- 为了将相关对象成簇集中
+- 为了获得非传统的行为
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 10-52-45.png)
+- C++要求所有operator news返回的指针都有适当的对齐
+- 有许多的理由要写自定的new和delete,包括改善性能，对heap运用错误进行调试、收集heap使用信息
+
+
+
+### 条款51 编写new和delete时需要固守常规
+
+- 只有当指向new-handling函数的指针是null, operator new才会抛出异常
+- C++规定，即使客户要求0 Bytes,operator new也得返回一个合法指针
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 11-03-53.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 11-04-13.png)
+- 有可能base class的operator new被调用用以分配derived class对象，这时令标准的operator new 处理
+- C++保证删除null指针永远安全
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 11-11-34.png)
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-28 11-40-02.png)
+
+### 条款52 写了placement new也要写palcement delete
+
+- Widget* pw=new Widget      new函数被调用，默认构造函数也被调用
+
+- 如果operator new接受的参数除了一定会有的那个size_t之外还有其他，这便是个所谓的placement new
+
+- void* operator new(std::size_t ,void* pMemory) throw();          placement new
+
+- placement delete 只有在伴随placement new调用而触发的构造函数出现异常时才会被调用
+
+- 在有palcement new时，也必须提供一个正常版的operator delete(用于构造期间无任何异常被抛出)
+
+- 小心避免让class专属的news掩盖客户期望的其他news
+
+- 缺省情况下，C++在global作用域提供以下形式的operator new:
+
+  ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 11-25-16.png)
+
+- 当你写一个placement operator new，请确定也写出对应的placement operator delete,如果不这么做，可能会发生内存泄露
+- 当你声明palcement new和placement delete,请确定不要无意识地遮盖了它们的正常版本
+
+
+
+## 第九章　杂项讨论
+
+### 条款53 不要轻忽编译器的警告
+
+- 严肃对待编译器发出的警告信息，努力在你的编译器的最高警告级别下争取无任何警告
+- 不同的编译器发出的警告信息可能不同
+
+
+
+### 条款54 让自己熟悉包括TR1在内的标准程序库
+
+- TR1代表　Techinical Report 1
+- C++98列入的C++标准程序库
+  - STL(标准模板库)
+  - Iostreams
+  - 国际化支持
+  - 数值处理，包括复数模板和纯数值数组
+  - 异常阶层体系
+  - C89标准程序库
+- TR1详细叙述了14个新组件，通通放在std命令空间内
+  - 指针指针　tr1::shared_ptr  和tr1::weak_ptr, tr1::shared_ptr会记录有多少个tr1::shared_ptr共同指向同一对象
+  - tr1::function ` void registerCallback(std::tr1::function<std::string (int)> func);`
+  - tr1::bind    能够做绑定器
+  - Hash tables   tr1::unordered_set  tr1::unordered_multiset  tr1::unordered_map,  tr1::unordered_multimap
+  - 正则表达式
+  - Tuples(变量组)　　pair只能持有两个对象，tr1::tuple可持有任意个数的对象
+  - tr1::array       大小固定，并不使用动态内存
+  - tr1::mem_fn这是个语句构造上与成员函数指针一致的东西
+  - tr1::reference_wrapper 一个让reference的行为更像对象的设施
+  - 随机数工具
+  - 数学特殊函数
+  - C99兼容扩充
+  - Type traits,一组traits class,用以提供类型的编译期信息
+  - tr1::result_of,这是个模板，用来推导函数调用的返回类型
+- TR1的14个组件中的10个奠基于免费的Boost程序库
+- 所有Boost组件都位于命令空间boost内,TR1组件都位于std::tr1
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 13-32-19.png)
+
+### 条例55 让自己熟悉Boost
+
+- Boost是一个C++开发者集结的社群，也是一个可自由下载的C++程序库群，网址是http://boost.org
+
+- Boost程序库的主题:
+
+  - 字符串和文本处理
+
+  - 容器
+
+  - 函数对象和高级编程，如lambda
+
+    ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 13-41-04.png)
+
+  - 泛型编程，覆盖一大组traits class
+  - 模板元编程TMP
+  - 数学和数值
+  - 正确性与测试
+  - 数据结构
+  - 语言间的支持性
+  - 内存
+  - 杂项
 

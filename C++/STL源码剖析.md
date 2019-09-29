@@ -676,6 +676,7 @@
 
 - 一个被广泛运用的平衡二叉树
 - 满足如下规则:
+
   - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-26 13-42-54.png)
 
 - **根据规则4,新增节点必须为红，根据规则3,新增节点之父必须为黑**
@@ -747,3 +748,111 @@
   - 如果插入一个node引起了树的不平衡，AVL和RB-Tree都是最多只需要2次旋转操作，即两者都是O(1)；但是在删除node引起树的不平衡时，最坏情况下，AVL需要维护从被删node到root这条路径上所有node的平衡性，因此需要旋转的量级O(logN)，而RB-Tree最多只需3次旋转，只需要O(1)的复杂度。
   - 其次，AVL的结构相较RB-Tree来说更为平衡，在插入和删除node更容易引起Tree的unbalance，因此在大量数据需要插入或者删除时，AVL需要rebalance的频率会更高。因此，RB-Tree在需要大量插入和删除node的场景下，效率更高。自然，由于AVL高度平衡，因此AVL的search效率更高。
   - map的实现只是折衷了两者在search、insert以及delete下的效率。总体来说，RB-tree的统计性能是高于AVL的。
+
+### 5.3 set
+
+- set元素的键值(key)就是实值(value)，所有元素都会根据元素的键值自动被排序,set不允许两个元素有相同的键值
+- set iterators是一种constant iterators, 迭代器在操作前和操作后都有效
+- set以RB-tree为底层机制
+- 面对关联式容器，应该使用其所提供的find函数来搜寻元素，会比使用STL算法find()更有效率，因为STL算法find()只是循序搜寻
+- 企图通过迭代器来改变set元素，是不被允许的，因为任意改变set元素值，会严重破坏set组织
+
+### 5.4 map
+
+- 所有元素都会根据元素的键值(key)自动被排序，map的所有元素都是pair,同时拥有key和value,pair的第一元素被视为键值，第二元素被视为实值，map不允许两个元素有相同的键值
+- map元素的键值关系到map元素的排列规则，任意改变map元素键值将会严重破坏map组织，如果想要修改元素的实值，是可以的。迭代器在操作前和操作后都有效
+- map以RB-tree为底层机制
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-27 14-31-17.png)
+
+-  map不允许相同键值存在，使用insert_equal
+
+
+
+### 5.5 multiset
+
+- 用法和set完全相同，唯一的差别是它允许键值重复，插入操作是insert_equal()
+
+### 5.6 multimap
+
+- 与map完全相同，唯一的差别在于它允许键值重复，插入操作是insert_equal()
+
+
+
+### 5.7 hashtable
+
+- 二叉搜索树具有对数平均时间的表现，构造在一个假设上: 输入数据具有足够的随机性
+- hash table(散列表)　在插入、删除、搜寻等操作上也具有常数平均时间的表现，是以统计为基础的，不需要依赖随机性
+
+- 概述
+  - hash table可被视为一种字典结构，在于提供常数时间之基本操作
+  - 散列函数
+  - 解决碰撞的方法: 线性探测、二次探测、开链等
+- 线性探测
+  - 元素的删除，必须采用惰性删除，只标记删除记号
+- 二次探测
+- 开链
+  - 在每一个表格元素中维护一个list,hash function 为我们分配某一个list, 然后我们在那个list身上执行元素的插入、搜寻、删除等操作。SGI STL的hash table便是采用这种做法
+
+- hashtable 的桶子与节点
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 14-32-36.png)
+
+- hashtable的迭代器
+
+  - hashtable迭代器必须永远维系着与整个"buckets vector"的关系，并记录目前所指的节点
+  - 迭代器是 forward迭代器
+
+- hashtable的数据结构
+
+  - vector\<node*,Alloc> buckets;
+
+  - buckets以vector完成
+  - bkt_num()调用hash function 
+
+- hashtable的构造与内存管理
+
+  - reserve是容器预留空间，但在空间内不真正创建元素对象，所以在没有添加新的对象之前，不能引用容器内的元素
+  -  resize是改变容器的大小，且在创建对象，因此，调用这个函数之后，就可以引用容器内的对象了
+  - 插入操作与表格重整(resize)
+    - insert_unique()   如果发现与链表中的某键值相同，就不插入，立刻返回
+    - 令新节点成为链表的第一个节点
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 15-17-33.png)
+
+  - insert_equal()　　如果发现与链表中的某键值相同，就马上插入。然后返回
+  - 判断元素的落脚处
+    - bkt_num()函数
+  - 复制和整体删除
+    - 整个hash table由vector和linked-list组合而成
+    - clear( )
+    - copy_from()
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 15-34-33.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-09-29 15-35-17.png)
+
+  - find  count函数　　输入参数为键值
+
+- hash functions
+
+  - 仿函数
+  - 有些型别，未给它定义hash function,用户需要自己定义
+
+
+
+### 5.8 hash_set
+
+- hash_set操作行为，都只是转调用hashtable的操作行为而已
+- RB-tree有自动排序功能，而hashtable没有
+- set元素的实值就是键值
+- 操作都使用insert_unique(),不允许键值重复
+- C字符串的相等于否，必须一个字符一个字符地比较，不能直接以const char*做比较
+
+
+
+### 5.9 hash_map
+
+- hash_map的操作行为，都是转调用hashtable的操作行为而已
+
+### 5.10 hash_multiset
+
+### 5.11 hash_multimap
+
