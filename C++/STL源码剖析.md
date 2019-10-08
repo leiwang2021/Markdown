@@ -856,3 +856,85 @@
 
 ### 5.11 hash_multimap
 
+
+
+## 第六章　算法
+
+### 6.1 算法概观
+
+- 特殊的算法往往搭配特定的数据结构
+- 算法分析与复杂度表示O( )
+- STL算法总览
+- 质变算法-会改变操作对象之值
+  - 所有STL算法都作用在由迭代器所标志的区间上
+  - 运算过程中会更改迭代器所指的元素内容
+- 非质变算法- 不改变操作对象之值
+- STL算法的一般形式
+  - 每一个STL算法的声明，都表现出它所需要的最低程序的迭代器类型
+  - replace()使用内建的equality操作符进行对比操作，replace_if()则以接收到的仿函数进行对比行为
+  - 质变算法通常提供两个版本: 一个是in-place版，另一个是copy版，如replace()   replace_copy()
+  - 所有数值算法，用户必须包含上层的<numeric>
+  - 其他STL算法，必须包含上层的<algorithm>
+
+### 6.2 算法的泛化过程
+
+- 只要把操作对象的型别加以抽象化、把操作对象的标示法和区间目标的移动行为抽象化，整个算法也就在一个抽象层面上工作了，称为算法的泛型化
+- 当指针指向array尾端以外的位置时，它只能用来与其他array指针相比较，不能提领其值
+
+
+
+### 6.3 数值算法
+
+- 运用实例
+
+  - ostream_iterator
+
+- accumulate
+
+  ```c++
+  T accumulate(InputIterator first, InputIterator last, T init);
+  T accumulate(InputIterator first, InputIterator last, T init, BinaryOpration binary_op);
+  ```
+
+- adjacent_difference  
+
+  - 与partial_sum互为逆运算
+
+- inner_product
+
+  - 能够计算[first1, last1)和[first2, first2+(last1-first1))的一般内积
+
+- partial_sum
+
+- power
+
+  ```c++
+  template<class T, class Integer, class MonoidOperation>
+  T power(T x, Integer n, MonoidOperation op) 
+  {
+  	if (0 == n)
+  		return x;
+  	else {
+  		while (0 == (n & 1)) {
+  			n >>= 1;
+  			x = op(x, x);
+  		}
+  		T result = x;
+  		n >>= 1;
+  		while (n != 0) {
+  			x = op(x, x);
+  			if (0 != (n & 1)) 
+  				result = op(result, x);
+  			n >>= 1;
+  		}
+  		return result;
+  	}
+  }
+  ```
+
+  - x^n = x^(2^i0 + 2^i1 + ... + 2^ik)
+  - 步骤一：先找到N的二进制表示里面最低2的次幂的地方k1
+  - 步骤二：找到了第一个2^k之后，后续的X ^ ( 2^(k+1) )就等于( X ^ (2^k) ) ^2
+  - 步骤三：然后依次循环，来计算N的二进制表示里，每一位的情况。根据N的每一位情况，来计算X的幂次方
+
+- iota
