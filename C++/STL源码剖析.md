@@ -938,3 +938,326 @@
   - 步骤三：然后依次循环，来计算N的二进制表示里，每一位的情况。根据N的每一位情况，来计算X的幂次方
 
 - iota
+
+
+
+### 6.4 基本算法<stl_algobase.h>
+
+- 运用实例
+
+- equal
+
+  - 第一版本缺省采用equality
+  - 第二版本允许指定仿函数
+
+- fill
+
+  - 将所有元素改填新值
+
+- fill_n
+
+  - 将[first, last)内的前n个元素改填新值
+  - inserter()可产生一个用来修饰迭代器的配接器
+
+- iter_swap
+
+  - iterator_traits的运用
+
+- lexicographical_compare
+
+  - 以字典排列方式对两个序列进行比较
+  - memcmp()是C标准函数，正是以unsigned char的方式来比较两序列中一一对应的每一个bytes
+
+- max
+
+- min
+
+- mismatch
+
+  - 用来平行比较两个序列，指出两者之间的第一个不匹配点，返回一对迭代器
+
+- swap
+
+- copy
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-09 15-54-35.png)
+
+  - 如果输出区间的尾端与输入区间重叠，可以使用copy
+  - 如果输出区间的起头与输入区间重叠，可以使用copy_backward
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-09 16-37-22.png)
+  - memove()会先将整个输入区间的内容复制下来，没有被覆盖的危险，copy算法根据其所接收的迭代器特性决定是否调用memove()
+  - copy更改的是迭代器所指对象，而非更改迭代器本身
+  - 如果指针所指对象拥有non-tirval assignment operator,复制操作就一定要通过它来进行，如果指针所指对象拥有的是trival assignment operator,复制操作可以不通过它，直接以最快速的内存拷贝方式完成(memove())
+  - 程序中所有用户自定义型别，都被编译器视为拥有non-trival ctor/dtor/operator=  ,如果我们确知某个class具备的是trival ctor/dtor/operator=,我们就得自己动手为它做特性设定，可借用<type_traits.h>中的__type_traits<T> 
+
+- copy_backward
+
+  - 与copy类似
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-09 16-36-57.png)
+  - 迭代器必须是BidirectionalIterators
+
+
+
+### 6.5 set相关算法
+
+- 并集(union)  交集(intersection)  差集(difference)   对称差集(symmetric difference)
+- 本节的四个算法所接受的set, 必须是有序区间，元素可以重复出现
+- 第一版本，第二版本允许用户指定a<b的意义
+- 当集合允许重复元素的存在时，并集，交集，差集，对称差集的定义都与直观定义有些微的不同
+
+- set_union
+
+  - s1 s2及其并集都是以排序区间表示，返回值为一个迭代器，指向输出区间的尾端
+
+  - max(m,n)  重复的元素
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-10 15-49-03.png)
+
+  - set_intersection
+    - min(m,n)重复的元素，并且全部来自s1
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-10 15-52-34.png)
+
+  - set_difference
+    - 能构造出集合s1-s2,出现s1但不出现于s2的每一个元素
+    - s1出现n次，s2出现m次，出现max(n-m,0)次
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-10 15-59-28.png)
+
+  - set_symmetric_difference
+    - 它能构造集合(s1-s2)U(s2-s1)
+    - |n-m| 
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-10 16-04-10.png)
+
+### 6.6 heap算法
+
+### 6.7 其他算法
+
+- 单纯的数据处理
+
+- adjacent_find
+
+  - 找出第一组满足条件的相邻元素
+
+- count
+
+  - 返回与value相等的元素个数
+
+- count_if
+
+  - 将一个仿函数施行于区间内，返回true的所有元素个数
+
+- find
+
+- find_if
+
+  - 找到第一个令仿函数运算结果为true者，没有则返回last
+
+- find_end
+  - 在序列1所覆盖的区间内，查找序列2的最后一次出现点，没有则返回last1
+  - 正向迭代器和负向迭代器
+
+- find_first_of
+
+  - 以[first2,last2)区间内的某些元素为查找目标，寻找它们在[first1,last1)区间内的第一次出现点
+
+- for_each
+
+  - 将仿函数f施行于区间内的每一个元素身上，不可以改变元素内容，若要修改，应该使用transform()
+
+- generate
+
+  - 将仿函数的运算结果填写在区间内的所有元素身上
+
+- generate_n
+
+  - 填写在n个元素身上
+
+- includes(应用于有序区间)
+
+  - 判断s2是否涵盖于s1,都必须是有序集合
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-12 15-57-40.png)
+
+  - 版本一
+  - 版本二　　comp的型别是Compare
+
+- max_element
+
+  - 返回一个迭代器，指向序列之中数值最大的元素
+
+- merge(应用于有序区间)
+
+  - 将两个经过排序的集合s1和s2，合并起来置于另一段空间，所得结果是一个有序序列。返回一个迭代器
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-12 16-09-57.png)
+
+- min_element
+
+  - 返回一个迭代器，指向序列之中数值最小的元素
+
+- partition 
+  - 所有被一元操作符判定为true的元素都会被放在区间的前段，被判定为false的元素，都会被放在区间的后段
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-12 16-21-01.png)
+
+- remove 移除(但不删除)
+
+  - 移除所有与value相等的元素，并不真正从容器中删除那些元素,容器大小未改变
+
+- remove_copy
+  - 将结果复制到一个以result标示起始位置的容器身上，新容器和原容器可以重叠
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-12 16-30-41.png)
+
+- remove_if
+  - 移除所有被仿函数核定为treu的元素，容器大小未改变
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-12 16-32-28.png)
+
+- remove_copy_if
+
+- replace
+
+  - 将所有旧值都以新值替代
+
+- replace_copy
+
+  - 新序列会被复制到result所指的容器中
+
+- replace_if
+
+  - 被pred评估为true的元素都以新值取而代之
+
+- replace_copy_if
+
+- reverse
+  - 将序列的元素在原容器中颠倒重排
+  - 设计为双层结构
+
+- reverse_copy
+
+- rotate
+  - 将[first,middle)内的元素和[middle,last)内的元素互换
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-12 16-46-09.png)
+
+- 迭代器的移动能力，影响了这个算法的效率，所以设计为双层结构
+  - forward iterator版
+  - bidirectional iterator版
+  - random access iterator版
+
+- rotate_copy
+
+- search
+
+  - 序列1内是否存在与序列2完全匹配的子序列
+
+- search_n
+  - 查找连续count个符合条件之元素所形成的子序列
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-12 17-30-36.png)
+
+- swap_ranges
+
+  - 将[first1,last1)区间内的元素与从first2开始，个数相同的元素互相交换，这两个序列可位于同一容器中，也可位于不同的容器中
+
+- transform
+  - 两个版本
+  - 第一版本以仿函数作用于[first, last)中的每一个元素身上，并将结果放进迭代器result所标示的容器中
+  - 第二版本以仿函数作用于一双元素身上，结果放在result中
+
+- unique
+
+  - 只移除相邻的重复元素
+
+- unique_copy
+
+- lower_bound(应用于有序区间)
+
+  - 二分查找
+  - 在不破坏排序状态的原则下，可插入value的第一个位置
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-14 16-46-13.png)
+
+- upper_bound
+
+  - 在不破坏顺序的情况下，可插入value的最后一个合适位置
+
+- binary_search(应用于有序区间)
+
+  - 二分查找法
+  - 在已排序的[first,last)中查找元素value
+  - 利用lower_bound函数
+
+- next_permutation
+  - 如a b c的排列组合:   abc  acb  bac  bca  cab  cba
+  - next_permutation会获得[first,last)所标示之序列的下一个排列组合
+
+- prev_permutation
+
+- random_shuffle
+  - 将[first,last)的元素次序随机重排
+  - 产生一个均匀分布，任何一个排列被选中的几率为1/N!
+  - 版本一使用内部随机数产生器
+  - 版本二使用一个会产生随机随机数的仿函数，该仿函数的传递方式是by_reference
+
+- partial_sort/ partial_sort_copy
+  - 接受一个middle迭代器，使序列中的middle-first个最小元素以递增顺序排序
+  - 算法内部使用heap sort来完成任务
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-14 17-25-25.png)
+
+- sort
+
+  - 接受两个随机存取迭代器，将区间内的所有元素以递增方式由小到大排列
+
+  - 所有关系型容器都拥有自动排序功能，不需要用到sort算法
+
+  - sort算法适合于vector  deque
+
+  - 数据量大时采用Quick sort,分段递归排序，数据量小于某个门槛后，改用Insertion Sort
+
+  - Insertion Sort
+    - 复杂度为O(N^2), 数据量小时有不错的效果
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-14 19-29-24.png)
+
+  - Quick sort
+    - 平均复杂度为O(NlogN)
+    - IntroSort最坏情况为O(NlogN)
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-14 19-32-31.png)
+
+    - Quick Sort采行分段排序，分段的原则通常采用median-of-three(首、尾、中英的中间值)
+
+    - Partitioning(分割)
+
+      ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-14 19-49-17.png)
+
+    - threshold阈值
+
+      - Quick Sort会为了极小的子序列而产生许多的函数递归调用
+      - 适当评估序列的大小，决定采用Quick Sort还是Insertion Sort
+
+    - final insertion sort
+
+    - introsort
+
+      - 当分割行为有恶化为二次行为的倾向时，能够自我监测，转而改用Heap Sort,但比一开始使用Heap Sort效果好
+
+  - SGI STL sort
+
+    - RW版本用的是纯粹是Quick Sort,而不是IntroSort
+
+- equal_range(应用于有序区间)
+
+  - 二分查找的一个版本
+  - 返回一对迭代器[i,j)区间内的每个元素都等同于value
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-14 20-18-56.png)
+
+     
+
+- inplace_merge(应用于有序区间)
+
+  - 如果两个连接在一起的序列[first,middle)和[middle,last)都已排序，那么inplace_merge可将它们结合成单一一个序列，并保持有序性
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-14 20-32-43.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-14 20-33-15.png)
+
+- nth_element
+  - 只接受RandomAccessIterator
+- merge_sort
+  - 将区间对半分割，左右两段各自排序，再利用inplace_merge重新组合为一个完整的有序序列，对半分割的操作可以递归进行，直到每一小段的长度为0或1
+
+
+
+## 第七章　仿函数(函数对象)
+
