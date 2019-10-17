@@ -1253,11 +1253,131 @@
   - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-14 20-33-15.png)
 
 - nth_element
+
   - 只接受RandomAccessIterator
 - merge_sort
+
   - 将区间对半分割，左右两段各自排序，再利用inplace_merge重新组合为一个完整的有序序列，对半分割的操作可以递归进行，直到每一小段的长度为0或1
 
 
 
 ## 第七章　仿函数(函数对象)
 
+### 7.1 仿函数概观
+
+- 一种具有函数特质的对象
+
+- ```c++
+  #include<functional>
+  greater<int> ig;
+  ig(4,6);
+  greater<int>()(4,6)  //先产生临时对象，再调用
+  ```
+
+
+
+### 7.2 可配接的关键
+
+- STL仿函数应该有能力被函数配接器修饰，每一个仿函数必须定义自己的相应型别
+- unary_function 用来呈现一元函数的参数型别和回返值型别
+- binary_function 用来呈现二元函数
+
+
+
+### 7.3 算术类仿函数
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-15 21-01-05.png)
+
+- 证同元素(identity element)
+
+### 7.4 关系运算类仿函数
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-15 21-05-13.png)
+
+### 7.5 逻辑运算类仿函数
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-15 21-07-03.png)
+
+### 7.6 证同、选择、投射
+
+- identity
+- select1st 接受一个pair,传回其第一元素
+- select2nd 接受一个pair,传回其第二元素
+- project1st  传回第一参数
+- project2st　　传回第二参数
+
+
+
+## 第八章　配接器
+
+- adapter事实上是一种设计模式
+
+### 8.1 配接器之概观与分类
+
+- 应用于容器container adapters
+  - queue 
+  - stack
+- 应用于迭代器　iterator adapters
+  - insert iterators
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-17 16-09-51.png)
+  - reverse iterators
+  - iostream iterators
+    - 可将迭代器绑定到某个iostrem上
+  - 由<iterato>获得
+- 应用于仿函数 function adapters
+  - <functional>
+  - 任何期望获得配接能力的组件，本身必须是可配接的
+  - 以经过修饰的一般函数搭配STL算法
+  - 以修饰过的成员函数搭配STL算法
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-17 16-25-21.png)
+
+
+
+### 8.2 container adapters
+
+- stack
+- queue
+
+### 8.3 iterator adapters
+
+- insert iterators
+
+  - operator=操作符调用底层容器的push_front()或push_back()或insert()
+
+- reverse iterators
+
+  - rbegin()
+  - rend()
+  - 双向序列容器且需要提供begin()和end()
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-17 16-51-27.png)
+
+  - 对逆向迭代器取值，就是将对应之正向迭代器后退一格而后取值
+
+- stream iterators
+
+  - istream_iterator
+    - 其实是在istream iterator内部维护一个istream member
+    - 只要客户端定义一个istream iterator并绑定到某个istream object,程序便立刻停在istream_iterator<T>::read()函数，等待输入，因此在必要的时候才定义istream_iterator
+    - 客户端对于这个迭代器所做的operator++ 操作，会被导引调用迭代器内部所含的istream_iterator的输入操作
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-17 19-04-10.png)
+  - ostream_iterator
+    - 在其内部维护一个ostream member,客户端对于这个迭代器所做的operator=操作，会被导引调用对应的ostream member的输出操作
+
+### 8.3 function adapters
+
+- 每一个function adapters也内藏了一个member object,其型别等同于它所要配接的对象
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-17 19-47-26.png)
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-17 19-49-58.png)
+
+- 对返回值进行逻辑否定: not1  not2
+- 对参数进行绑定，bind1st  bind2nd
+- 用于函数合成: compose1  compose2
+- 用于函数指针: ptr_fun
+  - 能将一般函数当做仿函数使用
+  - 用一个仿函数将一元函数指针包起来
+- 用于成员函数指针: mem_fun  mem_fun_ref
+  - 将成员函数当作仿函数使用
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-10-17 20-02-33.png)
+
+- mem_fun1  mem_fun1_ref
