@@ -725,3 +725,371 @@
     - SHUT_RD 关闭连接的读这一半
     - SHUT_WR　关闭连接的写这一半
     - SHUT_RDWR 连接的读半部和写半部都关闭
+
+
+
+### 6.7 str_cli函数
+
+```c++
+#include	"unp.h"
+
+void
+str_cli(FILE *fp, int sockfd)
+{
+	int			maxfdp1, stdineof;
+	fd_set		rset;
+	char		buf[MAXLINE];
+	int		n;
+
+	stdineof = 0;
+	FD_ZERO(&rset);
+	for ( ; ; ) {
+		if (stdineof == 0)
+			FD_SET(fileno(fp), &rset);
+		FD_SET(sockfd, &rset);
+		maxfdp1 = max(fileno(fp), sockfd) + 1;
+		Select(maxfdp1, &rset, NULL, NULL, NULL);
+
+		if (FD_ISSET(sockfd, &rset)) {	/* socket is readable */
+			if ( (n = Read(sockfd, buf, MAXLINE)) == 0) {
+				if (stdineof == 1)
+					return;		/* normal termination */
+				else
+					err_quit("str_cli: server terminated prematurely");
+			}
+
+			Write(fileno(stdout), buf, n);
+		}
+
+		if (FD_ISSET(fileno(fp), &rset)) {  /* input is readable */
+			if ( (n = Read(fileno(fp), buf, MAXLINE)) == 0) {
+				stdineof = 1;
+				Shutdown(sockfd, SHUT_WR);	/* send FIN */
+				FD_CLR(fileno(fp), &rset);
+				continue;
+			}
+
+			Writen(sockfd, buf, n);
+		}
+	}
+}
+```
+
+
+
+### 6.8 TCP回射服务器程序
+
+- 重新成使用select来处理任意个客户的单进程程序
+
+- 接收到FIN 或　EOF,  read返回的值是0
+
+- ```c++
+  /* include fig01 */
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int					i, maxi, maxfd, listenfd, connfd, sockfd;
+  	int					nready, client[FD_SETSIZE];
+  	ssize_t				n;
+  	fd_set				rset, allset;
+  	char				buf[MAXLINE];
+  	socklen_t			clilen;
+  	struct sockaddr_in	cliaddr, servaddr;
+  
+  	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+  
+  	bzero(&servaddr, sizeof(servaddr));
+  	servaddr.sin_family      = AF_INET;
+  	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  	servaddr.sin_port        = htons(SERV_PORT);
+  
+  	Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
+  
+  	Listen(listenfd, LISTENQ);
+  
+  	maxfd = listenfd;			/* initialize */
+  	maxi = -1;					/* index into client[] array */
+  	for (i = 0; i < FD_SETSIZE; i++)
+  		client[i] = -1;			/* -1 indicates available entry */
+  	FD_ZERO(&allset);
+  	FD_SET(listenfd, &allset);
+  /* end fig01 */
+  
+  /* include fig02 */
+  	for ( ; ; ) {
+  		rset = allset;		/* structure assignment */
+  		nready = Select(maxfd+1, &rset, NULL, NULL, NULL);
+  
+  		if (FD_ISSET(listenfd, &rset)) {	/* new client connection */
+  			clilen = sizeof(cliaddr);
+  			connfd = Accept(listenfd, (SA *) &cliaddr, &clilen);
+  #ifdef	NOTDEF
+  			printf("new client: %s, port %d\n",
+  					Inet_ntop(AF_INET, &cliaddr.sin_addr, 4, NULL),
+  					ntohs(cliaddr.sin_port));
+  #endif
+  
+  			for (i = 0; i < FD_SETSIZE; i++)
+  				if (client[i] < 0) {
+  					client[i] = connfd;	/* save descriptor */
+  					break;
+  				}
+  			if (i == FD_SETSIZE)
+  				err_quit("too many clients");
+  
+  			FD_SET(connfd, &allset);	/* add new descriptor to set */
+  			if (connfd > maxfd)
+  				maxfd = connfd;			/* for select */
+  			if (i > maxi)
+  				maxi = i;				/* max index in client[] array */
+  
+  			if (--nready <= 0)
+  				continue;				/* no more readable descriptors */
+  		}
+  
+  		for (i = 0; i <= maxi; i++) {	/* check all clients for data */
+  			if ( (sockfd = client[i]) < 0)
+  				continue;
+  			if (FD_ISSET(sockfd, &rset)) {
+  				if ( (n = Read(sockfd, buf, MAXLINE)) == 0) {
+  						/*4connection closed by client */
+  					Close(sockfd);
+  					FD_CLR(sockfd, &allset);
+  					client[i] = -1;
+  				} else
+  					Writen(sockfd, buf, n);
+  
+  				if (--nready <= 0)
+  					break;				/* no more readable descriptors */
+  			}
+  		}
+  	}
+  }
+  /* end fig02 */
+  ```
+
+- 当一个服务器在处理多个客户时，它不能阻塞于只与单个客户相关的函数调用，否则可能导致服务器被挂起，拒绝为所有其他客户提供服务，这就是拒绝服务型攻击。可能的解决办法
+
+  - 使用非阻塞式I/O
+  - 让每个客户由单独的控制线程提供服务
+  - 对I/O操作设置一个超时
+
+### 6.9 pselect函数
+
+- 使用timespec结构
+- 增加了第六个参数: 一个指向信号掩码的指针，该参数允许程序先禁止递交某些信号，再测试由这些当前被禁止信号的信号处理函数设置的全局变量，然后调用pselect,重新设置信号掩码
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 17-06-39.png)
+
+### 6.10 poll函数
+
+- poll函数提供的功能与select类似，不过在处理流设备时，它能够提供额外的信息
+- int poll(struct pollfd* fdarray, unsigned long nfds, int timeout);
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 17-11-02.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 17-12-19.png)
+
+- poll识别三类数据: 普通、优先级带　高优先级　出自于基于流的实现
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 17-15-18.png)
+
+### 6.11 TCP回射服务器程序
+
+```c++
+/* include fig01 */
+#include	"unp.h"
+#include	<limits.h>		/* for OPEN_MAX */
+
+int
+main(int argc, char **argv)
+{
+	int					i, maxi, listenfd, connfd, sockfd;
+	int					nready;
+	ssize_t				n;
+	char				buf[MAXLINE];
+	socklen_t			clilen;
+	struct pollfd		client[OPEN_MAX];
+	struct sockaddr_in	cliaddr, servaddr;
+
+	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family      = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port        = htons(SERV_PORT);
+
+	Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
+
+	Listen(listenfd, LISTENQ);
+
+	client[0].fd = listenfd;
+	client[0].events = POLLRDNORM;
+	for (i = 1; i < OPEN_MAX; i++)
+		client[i].fd = -1;		/* -1 indicates available entry */
+	maxi = 0;					/* max index into client[] array */
+/* end fig01 */
+
+/* include fig02 */
+	for ( ; ; ) {
+		nready = Poll(client, maxi+1, INFTIM);
+
+		if (client[0].revents & POLLRDNORM) {	/* new client connection */
+			clilen = sizeof(cliaddr);
+			connfd = Accept(listenfd, (SA *) &cliaddr, &clilen);
+#ifdef	NOTDEF
+			printf("new client: %s\n", Sock_ntop((SA *) &cliaddr, clilen));
+#endif
+
+			for (i = 1; i < OPEN_MAX; i++)
+				if (client[i].fd < 0) {
+					client[i].fd = connfd;	/* save descriptor */
+					break;
+				}
+			if (i == OPEN_MAX)
+				err_quit("too many clients");
+
+			client[i].events = POLLRDNORM;
+			if (i > maxi)
+				maxi = i;				/* max index in client[] array */
+
+			if (--nready <= 0)
+				continue;				/* no more readable descriptors */
+		}
+
+		for (i = 1; i <= maxi; i++) {	/* check all clients for data */
+			if ( (sockfd = client[i].fd) < 0)
+				continue;
+			if (client[i].revents & (POLLRDNORM | POLLERR)) {
+				if ( (n = read(sockfd, buf, MAXLINE)) < 0) {
+					if (errno == ECONNRESET) {
+							/*4connection reset by client */
+#ifdef	NOTDEF
+						printf("client[%d] aborted connection\n", i);
+#endif
+						Close(sockfd);
+						client[i].fd = -1;
+					} else
+						err_sys("read error");
+				} else if (n == 0) {
+						/*4connection closed by client */
+#ifdef	NOTDEF
+					printf("client[%d] closed connection\n", i);
+#endif
+					Close(sockfd);
+					client[i].fd = -1;
+				} else
+					Writen(sockfd, buf, n);
+
+				if (--nready <= 0)
+					break;				/* no more readable descriptors */
+			}
+		}
+	}
+}
+/* end fig02 */
+```
+
+## 第七章　套接字选项
+
+- 获取和设置影响套接字的选项
+  - getsockopt和setsockopt函数
+  - fnct1函数
+  - icot1函数
+
+### 7.2 getsockopt和setsockopt函数
+
+- 仅用于套接字
+- 套接字选项分为两大基本类型
+  - 一是启用或禁止某个特性的二元选项(标志选项)
+  - 二是取得并返回我们可以设置或检查的特定值的选项(值选项)
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 14-13-53.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 14-16-35.png)
+
+### 7.3 检查选项是否受支持并获取默认值
+
+- 创建一个用于测试选项的套接字，测试套接字层，TCP层和IPv4层套接字选项所用的是一个IPv4的TCP套接字
+- 测试IPv6层套接字选项所用的是一个IPv6的TCP套接字，测试SCTP层套接字选项所用的上一个IPv4的SCTP套接字
+
+### 7.4 套接字状态
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 15-17-14.png)
+
+### 7.5 通用套接字选项
+
+- 这些选项是协议无关的
+
+- SO_BROADCAST
+
+  - 本选项开启或禁止进程发送广播消息
+
+- SO_DEBUG
+
+  - 仅由TCP支持，当给一个TCP套接字开启本选项时，内核将为TCP在该套接字发送和接收的所有分组保留详细跟踪信息，保存在内核的某个环形缓冲区汇中
+
+- SO_DONTROUTE
+
+  - 规定外出的分组将绕过底层协议的正常路由机制
+
+- SO_ERROR
+
+  - 当一个套接字发生错误时，so_error的变量，待处理错误，当进程调用read且没有数据返回时，如果so_error为非0值，那么read返回-1且errno被置为so_error的值
+  - 一个套接字上出现的待处理错误一旦返回给用户进程，它的so_errnor就得复位为0
+
+- SO_KEPPALIVE
+
+  - 保持存活选项
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 15-37-43.png)
+
+  - 一般由服务器使用，服务器花大部分时间阻塞在等待穿越TCP连接的输入上
+  - 保持存活选项将检测出半开连接并终止它们
+  - 应用进程自己也可以实现超时
+  - 检测各种TCP条件的方法
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 15-45-47.png)
+
+- SO_LINGER
+
+  - 指定close函数对面向连接的协议如何操作，默认操作是close立即返回，但是如果有数据残留在套接字发送缓冲区，系统将试着把这些数据发送给对端
+  - struct linger{ int l_onoff; int l_linger}
+  - 应用进程检查close的返回值是非常重要的，因为如果在数据发送完并被确认前延迟时间到，close将返回EWOULDBLOCK错误，套接字发送缓冲区中的任何残留数据都被丢弃
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 15-56-03.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 16-02-56.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 16-03-57.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 16-04-20.png)
+
+  - 设置SO_LINGER套接字选项后，close的成功返回只是告诉我们先前发送的数据和FIN已由对端TCP确认，而不能告诉我们对端应用进程是否已读取数据
+  - 让客户知道服务器已读取数据的一个方法是改为调用shutdown,而不是调用close,并等待对端连接的当地端
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 16-10-57.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 16-12-06.png)
+
+  - 应用级ACK
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 16-14-57.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 16-17-12.png)
+
+- SO_OOBINLINE
+  - 带外数据将被留在正常的输入队列中
+- SO_RCVBUF和SO_SNDBUF
+  - TCP套接字接收缓冲区不可能溢出，因为不允许对端发出超过本端所通告窗口大小的数据
+  - 对UDP,当接收到的数据报装不进套接字接收缓冲区时，该数据报被丢弃
+  - TCP的窗口规模选项是在SYN分节得到的，SO_RCVBUF必须在调用connect之前设置，对于服务器，必须在调用listen之前设置
+  - 至少是MSS值的4倍
+  - TCP必须为每个分节保留一个副本，直到接收到来自服务器的相应ACK
+- SO_RCVLOWAT和SO_SNDLOWAT
+  - 接收低水位标记
+  - 发送低水位标记
+  - 由select函数使用
+  - UDP套接字的发送缓冲区中可用空间的字节数不变，UDP不为应用进程传递给它的数据保留副本
+- SO_RCVTIMEO和SO_SNDTIMEO
+  - 给套接字的接收和发送设置一个超时值
+- SO_REUSEADDR和SO_REUSEPORT
+  - 四个不同的功能
+- SO_TYPE
+  - 返回套接字的类型
+- SO_USELOOPBACK
+  - 仅用于路由域的套接字
+  - 开启时，相应套接字将接收在其上发送的任何数据报的一个副本

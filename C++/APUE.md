@@ -1102,16 +1102,1079 @@
 ### 10.10 函数alarm和pause
 
 - 使用alarm函数可以设置一个定时器，在将来的某个时刻该定时器会超时，产生SIGALRM信号
+
 - 每个进程只能有一个闹钟时间
+
 - pause函数使调用进程挂起直至捕捉到一个信号
+
 - 只有执行了一个信号处理程序并从其返回时，pause才返回
+
 - alarm和pasue之间的竞争条件问题
+
 - 如果SIGALRM中断了某个其他信号处理程序，则调用longjmp会提早终止该信号处理程序
+
 - 除了用来实现sleep函数外，alarm函数常用于对可能阻塞的操作设置时间上限值
   - 注意：如果系统调用是自动重启动的，则当从SIGALRM信号处理程序返回时，read并不被中断
   - 使用longjmp实现，无需担心一个慢速的系统调用是否被中断
   - 可能会有与其他信号处理程序交互的问题
+
 - 如果要对I/O操作设置时间限制，另一种选择是使用select或poll函数
 
+### 10.11 信号集
+
+- 数据类型sigset_t以包含一个信号集
+- sigemptyset  初始化由set指向的信号集，清除其中的信号
+- sigfillset　初始化由set指向的信号集，使其包括所有信号
+- sigaddset　将一个信号添加到已有的信号集中
+- sigdelset　从信号集中删除一个信号
+- sigismember
+- c语言的逗号运算符，将逗号运算符后的值作为表达式的值返回
+- 如果实现的信号数目少于一个整型量所包含的位数，则可用一位代表一个信号的方法实现信号集
+
+### 10.12 函数sigprocmask
+
+- 一个进程的信号屏蔽字规定了当前阻塞而不能递送给该进程的信号集
+- sigprocmask可以检测或更改进程的信号屏蔽字
+- 仅为单线程进程定义的
+
+###   10.13 函数sigpending
+
+- 返回一个信号集，对于调用进程而言，其中的各信号是阻塞不能递送的
+
+- ```c++
+  #include "apue.h"
   
+  static void	sig_quit(int);
+  
+  int
+  main(void)
+  {
+  	sigset_t	newmask, oldmask, pendmask;
+  
+  	if (signal(SIGQUIT, sig_quit) == SIG_ERR)
+  		err_sys("can't catch SIGQUIT");
+  
+  	/*
+  	 * Block SIGQUIT and save current signal mask.
+  	 */
+  	sigemptyset(&newmask);
+  	sigaddset(&newmask, SIGQUIT);
+  	if (sigprocmask(SIG_BLOCK, &newmask, &oldmask) < 0)
+  		err_sys("SIG_BLOCK error");
+  
+  	sleep(5);	/* SIGQUIT here will remain pending */
+  
+  	if (sigpending(&pendmask) < 0)
+  		err_sys("sigpending error");
+  	if (sigismember(&pendmask, SIGQUIT))
+  		printf("\nSIGQUIT pending\n");
+  
+  	/*
+  	 * Restore signal mask which unblocks SIGQUIT.
+  	 */
+  	if (sigprocmask(SIG_SETMASK, &oldmask, NULL) < 0)
+  		err_sys("SIG_SETMASK error");
+  	printf("SIGQUIT unblocked\n");
+  
+  	sleep(5);	/* SIGQUIT here will terminate with core file */
+  	exit(0);
+  }
+  
+  static void
+  sig_quit(int signo)
+  {
+  	printf("caught SIGQUIT\n");
+  	if (signal(SIGQUIT, SIG_DFL) == SIG_ERR)
+  		err_sys("can't reset SIGQUIT");
+  }
+  ```
+
+
+
+###  10.14 函数sigaction
+
+- 检查或修改与指定信号相关联的处理动作
+
+- struct sigaction结构
+
+- 如果在某种信号被阻塞时，它发生了5次，对这种信号解除阻塞后，那么对这种信号处理函数通常只会被调用一次
+
+- 一旦对给定的信号设置了一个动作，那么在调用sigaction显式地改变它之前，该设置就一直有效
+
+- sa_flags字段
+
+- 用sigaction实现signal函数
+
+- ```c++
+  if(signo=SIGALRM){
+  #ifdef SA_INTERRUPT
+  	act,sa_flags | = SA_INTERRUPT;
+  #endif
+  } else{
+      act.sa_flags | = SA_RESTART;
+  }
+  //对除SIGALRM以外的所有信号，尝试设置SA_RESTART标志，于是被这些信号中断的系统调用能够自动重启，不希望重启由SIGALRM信号中断的系统调用，希望对I/O操作可以设置时间限制
+  
+  ```
+
+### 10.15 函数sigsetjmp和siglongjmp
+
+- POSIX.1并没有指定setjmp和longjmp对信号屏蔽字的作用，而是定义了两个新函数sigsetjmp和siglongjmp,在信号处理程序中进行非局部转移时应当使用这两个函数
+- sigsetjmp增加了一个参数，如果savemask非0, 则sigsetjmp在env中保存进程的当前信号屏蔽字，调用siglongjmp时，如果带非0 savemask的sigsetjmp调用保存了env,则siglongjmp从其中恢复保存的信号屏蔽字
+- 当调用一个信号处理程序时，被捕捉到的信号加到进程的当前信号屏蔽字中，当从信号处理程序返回时，恢复原来的屏蔽字，siglongjmp恢复了由sigsetjmp所保存的信号屏蔽字
+- 而如果采用setjmp和longjmp，则可能不会恢复信号屏蔽字
+
+### 10.16 函数sigsuspend
+
+- 如果在解除阻塞时刻和pause之间确实发生了信号，那么就会产生问题，因为可能永远不会再见到该信号，pause永远阻塞
+- 为了纠正此问题，需要在一个原子操作中先恢复信号屏蔽字，然后使进程休眠，由sigsuspend提供此功能
+- 进程的信号屏蔽字设置为由sigmask指向的值，在捕捉到一个信号或发生了一个会终止该进程的信号之前，该进程被挂起。如果捕捉到一个信号而且从该信号处理程序返回，则sigsuspend返回，并且该进程的信号屏蔽字设置为调用sigsuspend之前的值。捕捉到该信号进入到该信号的信号处理程序中时，该信号被阻塞。
+- 数据类型　sig_atomic_t, 这是右ISO C标准定义的变量类型，在写这种类型变量是不会被中断，这种变量不会跨越边界，可以用一条机器指令对其进行访问，总是包括ISO类型修饰符volatile,　该变量将由两个不同的控制线程访问-main函数和异步执行的信号处理程序
+- 可以用信号实现父子进程的同步
+
+### 10.17 函数abort
+
+- abort函数的功能是使程序异常终止，将SIGABRT信号发送给调用进程
+- 调用kill使其为调用者产生信号，如果该信号是不被阻塞的，则在kill返回前该信号就被传送给了该进程
+
+### 10.18 函数system
+
+- POSIX.1要求system忽略SIGINT和SIGQUIT, 阻塞SIGCHLD
+
+- 当用system运行另一个程序时，不应使父子进程两者都捕捉终端产生的信号: 中断和退出，这两个信号只应发送给正在运行的程序:子进程
+
+- 当system创建的子进程结束时，system的调用者可能错误地认为，它自己的一个子进程结束了，于是，调用者将会调用一种wait函数以获得子进程的终止状态，阻止了system函数获得子进程的终止状态，并将其作为它的返回值
+
+- 若从shell调用ed,并键入中断字符，则它捕捉中断信号并打印问号，ed程序对退出信号的处理方式设置为忽略
+
+- 调用sigprocmask函数解除SIGCHLD信号的调用是在调用waitpid获取子进程的终止状态之后
+
+- 在Linux中，在system函数调用了waitpid后，SIGCHLD保持为未决，当解除了对此信号的阻塞后，他被递送到调用者
+
+- POSIX.1说明，在SIGCHLD未决期间，如若wait或waitpid返回了子进程的状态，那么SIGCHLD信号不应该递送给该父进程
+
+- ```c++
+  #include	<sys/wait.h>
+  #include	<errno.h>
+  #include	<signal.h>
+  #include	<unistd.h>
+  
+  int
+  system(const char *cmdstring)	/* with appropriate signal handling */
+  {
+  	pid_t				pid;
+  	int					status;
+  	struct sigaction	ignore, saveintr, savequit;
+  	sigset_t			chldmask, savemask;
+  
+  	if (cmdstring == NULL)
+  		return(1);		/* always a command processor with UNIX */
+  
+  	ignore.sa_handler = SIG_IGN;	/* ignore SIGINT and SIGQUIT */
+  	sigemptyset(&ignore.sa_mask);
+  	ignore.sa_flags = 0;
+  	if (sigaction(SIGINT, &ignore, &saveintr) < 0)
+  		return(-1);
+  	if (sigaction(SIGQUIT, &ignore, &savequit) < 0)
+  		return(-1);
+  	sigemptyset(&chldmask);			/* now block SIGCHLD */
+  	sigaddset(&chldmask, SIGCHLD);
+  	if (sigprocmask(SIG_BLOCK, &chldmask, &savemask) < 0)
+  		return(-1);
+  
+  	if ((pid = fork()) < 0) {
+  		status = -1;	/* probably out of processes */
+  	} else if (pid == 0) {			/* child */
+  		/* restore previous signal actions & reset signal mask */
+  		sigaction(SIGINT, &saveintr, NULL);
+  		sigaction(SIGQUIT, &savequit, NULL);
+  		sigprocmask(SIG_SETMASK, &savemask, NULL);
+  
+  		execl("/bin/sh", "sh", "-c", cmdstring, (char *)0);
+  		_exit(127);		/* exec error */
+  	} else {						/* parent */
+  		while (waitpid(pid, &status, 0) < 0)
+  			if (errno != EINTR) {
+  				status = -1; /* error other than EINTR from waitpid() */
+  				break;
+  			}
+  	}
+  
+  	/* restore previous signal actions & reset signal mask */
+  	if (sigaction(SIGINT, &saveintr, NULL) < 0)
+  		return(-1);
+  	if (sigaction(SIGQUIT, &savequit, NULL) < 0)
+  		return(-1);
+  	if (sigprocmask(SIG_SETMASK, &savemask, NULL) < 0)
+  		return(-1);
+  
+  	return(status);
+  }
+  ```
+
+- system的返回值
+
+  - system的返回值是shell的终止状态
+
+  - 在Bourne shell中，终止状态是128加上一个信号编号
+  - 直接调用fork exec wait，则终止状态与调用system是不同的
+
+### 10.19 函数sleep nanosleep clock_nanosleep
+
+- sleep, 当由于捕捉到某个信号，提前返回时，返回的是未休眠完的秒数
+- 用nanosleep函数实现sleep
+- nanosleep函数不涉及产生任何信号，不需要担心与其他函数的交互
+- clock_nanosleep
+
+### 10.20 函数sigqueue
+
+- 增加对信号排队的支持
+
+### 10.21 作业控制信号
+
+- 交互式shell
+
+- 由init将3个作业控制信号SIGTSTP SIGTTIN SIGTTOU设置为SIG_IGN ，这种配置由所有登录shell继承，只有作业控制shell才应将这3个信号重新设置为SIG_DFL
+
+- ```c++
+  #include "apue.h"
+  
+  #define	BUFFSIZE	1024
+  
+  static void
+  sig_tstp(int signo)	/* signal handler for SIGTSTP */
+  {
+  	sigset_t	mask;
+  
+  	/* ... move cursor to lower left corner, reset tty mode ... */
+  
+  	/*
+  	 * Unblock SIGTSTP, since it's blocked while we're handling it.
+  	 */
+  	sigemptyset(&mask);
+  	sigaddset(&mask, SIGTSTP);
+  	sigprocmask(SIG_UNBLOCK, &mask, NULL);
+  
+  	signal(SIGTSTP, SIG_DFL);	/* reset disposition to default */
+  
+  	kill(getpid(), SIGTSTP);	/* and send the signal to ourself */
+  
+  	/* we won't return from the kill until we're continued */
+  
+  	signal(SIGTSTP, sig_tstp);	/* reestablish signal handler */
+  
+  	/* ... reset tty mode, redraw screen ... */
+  }
+  
+  int
+  main(void)
+  {
+  	int		n;
+  	char	buf[BUFFSIZE];
+  
+  	/*
+  	 * Only catch SIGTSTP if we're running with a job-control shell.
+  	 */
+  	if (signal(SIGTSTP, SIG_IGN) == SIG_DFL)
+  		signal(SIGTSTP, sig_tstp);
+  
+  	while ((n = read(STDIN_FILENO, buf, BUFFSIZE)) > 0)
+  		if (write(STDOUT_FILENO, buf, n) != n)
+  			err_sys("write error");
+  
+  	if (n < 0)
+  		err_sys("read error");
+  
+  	exit(0);
+  }
+  ```
+
+### 10.22 信号名和编号
+
+- 信号名数组
+- 可利用psignal函数打印与信号编号对应的字符串
+- psiginfo函数
+- strsignal
+
+## 第11章　线程
+
+- 一个进程中的所有线程都可以访问该进程的组成部件，如文件描述符和内存
+
+### 11.2 线程概念
+
+- 多线程的优点
+  - 每个线程在进行事件处理时可以采用同步编程方式
+  - 多个进程必须使用操作系统提供的复杂机制才能实现内存和文件描述符的共享，而多个线程自动地可以访问相同的存储地址空间和文件描述符
+  - 多个控制线程时，相互独立的任务的处理就可以交叉进行
+  - 多线程可以把程序中处理用户输入输出的部分与其他部分分开
+- Unix进程可以看成只有一个控制线程
+- 不管处理器个数的多少，程序都可以通过使用线程得以简化
+- 线程包含: 线程ID 一组寄存器值　栈　调度优先级　策略　信号屏蔽字　errno变量　以及线程私有数据
+- 一个进程的所有信息对该进程的所有线程都是共享的，包括可执行程序的代码，程序的全局内存，堆内存，栈，以及文件描述符
+- 线程的测试宏是_POSIX_THREADS可以在编译时确定是否支持线程
+
+### 11.3 线程标识
+
+- 线程ID只在它所属的进程上下文中才有意义，用pthread_t的数据类型来表示，用一个结构来代表
+- pthread_euqal 两个线程ID进行比较
+- 线程可以通过调用pthread_self函数获得自身的线程ID
+
+### 11.4 线程创建
+
+- 在传统Unix进程模型中，每个进程只有一个控制线程，这与基于线程的模型中每个进程只包含一个线程是相同的
+
+- 新增的线程可以通过调用pthread_create函数创建
+
+- int pthread_create(pthread_t *restrict tidp, const pthread_attr_t\* restrict attr, void\*(\*star_rtn)(void\*), void *restrict arg);
+
+- 新创建的线程从start_rtn函数的地址开始运行
+
+- 线程创建不能保证哪个线程会先运行，新创建的线程可以访问进程的地址空间，并且继承调用线程的浮点环境和信号屏蔽字，但是该线程的挂起信号集会被清除
+
+- 每个线程都提供errno的副本
+
+- 如果新线程在主线程调用pthread_create返回之前就运行了，那么新线程看到的是未经初始化的ntid的内容，可能并不是正确的线程ID
+
+- 主线程和新线程之间的竞争
+
+-   pthread 库不是 Linux 系统默认的库，连接时需要使用静态库 libpthread.a，所以在使用pthread_create()创建线程，以及调用 pthread_atfork()函数建立fork处理程序时，需要链接该库。
+
+  问题解决：
+      在编译中要加 -lpthread参数
+      gcc   mult-thread-tcp-server.c   -o   mult-thread-tcp-server   -lpthread
+      mult-thread-tcp-server.c 为你的源文件，不要忘了加上头文件#include<pthread.h>
+
+- Linux线程ID是用无符号长整型来表示的，但是看起来像指针
+
+- Linux 2.4中，是用单独的进程实现每个线程的
+
+- Linux 2.6中，采用了一个称为Native POSIX线程库的新线程实现，支持单个进程中有多个线程的模型
+
+### 11.5 线程终止
+
+- 如果进程中的任意线程调用了exit  _exit _Exit，那么整个进程就会终止
+
+- 如果默认的动作是终止进程，那么发送到线程的信号就会终止整个进程
+
+- 线程的退出方式
+
+  - 简单地从启动例程中返回，返回值是线程的退出码
+  - 可以被同一进程中的其他线程取消
+  - 调用pthread_exit
+
+- pthread_join
+
+  - 调用线程将一直阻塞，直到指定的线程调用pthread_exit,从启动例程中返回或者被取消，rval_ptr包含相应的信息
+  - 可以通过pthread_join自动地把线程置于分离状态
+
+- ```c++
+  #include "apue.h"
+  #include <pthread.h>
+  
+  void *
+  thr_fn1(void *arg)
+  {
+  	printf("thread 1 returning\n");
+  	return((void *)1);
+  }
+  
+  void *
+  thr_fn2(void *arg)
+  {
+  	printf("thread 2 exiting\n");
+  	pthread_exit((void *)2);
+  }
+  
+  int
+  main(void)
+  {
+  	int			err;
+  	pthread_t	tid1, tid2;
+  	void		*tret;
+  
+  	err = pthread_create(&tid1, NULL, thr_fn1, NULL);
+  	if (err != 0)
+  		err_exit(err, "can't create thread 1");
+  	err = pthread_create(&tid2, NULL, thr_fn2, NULL);
+  	if (err != 0)
+  		err_exit(err, "can't create thread 2");
+  	err = pthread_join(tid1, &tret);
+  	if (err != 0)
+  		err_exit(err, "can't join with thread 1");
+  	printf("thread 1 exit code %ld\n", (long)tret);
+  	err = pthread_join(tid2, &tret);
+  	if (err != 0)
+  		err_exit(err, "can't join with thread 2");
+  	printf("thread 2 exit code %ld\n", (long)tret);
+  	exit(0);
+  }
+  ```
+
+- pthread_create和pthread_exit函数的无类型指针参数可以传递的值不止一个，这个指针可以传递包含复杂信息的结构的地址
+
+- pthread_cancel函数来请求取消同一进程中的其他线程，并不等待线程终止，仅仅提出请求
+
+- 线程可以安排它退出时需要调用的函数，即线程清理处理程序，处理记录在栈中
+
+- pthread_cleanup_push
+
+- pthread_cleanup_pop  可以实现为宏，必须在与线程相同的作用域中以匹配对的形式使用
+
+- 线程如果通过从它的启动例程中返回而终止的话，它的清理处理程序就不会被调用
+
+- 需要把pthread_cleanup_pop和pthread_cleanup_push调用匹配起来
+
+- ```c++
+  #include "apue.h"
+  #include <pthread.h>
+  
+  void
+  cleanup(void *arg)
+  {
+  	printf("cleanup: %s\n", (char *)arg);
+  }
+  
+  void *
+  thr_fn1(void *arg)
+  {
+  	printf("thread 1 start\n");
+  	pthread_cleanup_push(cleanup, "thread 1 first handler");
+  	pthread_cleanup_push(cleanup, "thread 1 second handler");
+  	printf("thread 1 push complete\n");
+  	if (arg)
+  		return((void *)1);
+  	pthread_cleanup_pop(0);
+  	pthread_cleanup_pop(0);
+  	return((void *)2);
+  }
+  
+  void *
+  thr_fn2(void *arg)
+  {
+  	printf("thread 2 start\n");
+  	pthread_cleanup_push(cleanup, "thread 2 first handler");
+  	pthread_cleanup_push(cleanup, "thread 2 second handler");
+  	printf("thread 2 push complete\n");
+  	if (arg)
+  		pthread_exit((void *)3);
+  	pthread_cleanup_pop(0);
+  	pthread_cleanup_pop(0);
+  	pthread_exit((void *)4);
+  }
+  
+  int
+  main(void)
+  {
+  	int			err;
+  	pthread_t	tid1, tid2;
+  	void		*tret;
+  
+  	err = pthread_create(&tid1, NULL, thr_fn1, NULL);  //处理程序未运行
+  	//	err = pthread_create(&tid1, NULL, thr_fn1, (void*)1);　//运行了
+  	if (err != 0)
+  		err_exit(err, "can't create thread 1");
+  	err = pthread_create(&tid2, NULL, thr_fn2, NULL);
+  	//err = pthread_create(&tid2, NULL, thr_fn2, (void*)1);
+  	if (err != 0)
+  		err_exit(err, "can't create thread 2");
+  	err = pthread_join(tid1, &tret);
+  	if (err != 0)
+  		err_exit(err, "can't join with thread 1");
+  	printf("thread 1 exit code %ld\n", (long)tret);
+  	err = pthread_join(tid2, &tret);
+  	if (err != 0)
+  		err_exit(err, "can't join with thread 2");
+  	printf("thread 2 exit code %ld\n", (long)tret);
+  	exit(0);
+  }
+  ```
+
+- 宏把某些上下文存放在栈上
+
+- 在默认情况下，线程的终止状态会保存直到对该线程调用pthread_join, 如果线程已经被分离，线程的底层存储资源可以在线程终止时立即被收回。在线程被分离后，我们不能用pthread_join函数等待它的终止状态，因为对分离状态的线程调用pthread_join会产生未定义行为
+
+- 可以调用pthread_detach分离线程
+
+### 11.6 线程同步
+
+- 当多个控制线程共享相同的内存时，需要确保每个线程看到一致的数据视图
+- 当一个线程可以修改的变量，其他线程也可以读取或修改时，就需要对这些线程进行同步
+- 线程不得不使用锁，同一时间只允许一个线程访问该变量，如果线程B希望读取该变量，它首先要获得锁。当线程A更新变量，也需要获得同样的这把锁。
+- 两个或多个线程试图在同一时间修改同一变量时，也需要进行同步
+- 如果增1只需要一个存储器周期，那么就没有竞争存在，如果数据总是以顺序一致出现的，就不需要额外的同步。在现代操作系统中，存储访问需要多个总线周期，处理器的总线周期通常在多个处理器上是交叉的，所以我们不能保证数据是一致的
+
+#### 互斥量
+
+- 互斥量本质是一把锁，在访问共享资源前对互斥量进行加锁，访问完成后释放互斥量
+
+- 对互斥量进行加锁以后，其他试图再次对互斥量加锁的线程都会被阻塞直到当前线程释放该互斥锁。如果释放互斥量时有一个以上的线程阻塞，那么所有该锁上的阻塞线程都会变成可运行状态，第一个变成运行的线程就可以对互斥量加锁，其他线程就会看到互斥量依然是锁着的。
+
+- 互斥变量是用pthread_mutex_t数据类型表示的
+
+- pthread_mutex_init函数进行初始化
+
+- 如果动态分配互斥量(malloc)，在释放内存前需要调用pthread_mutex_destory
+
+- 对互斥量进行加锁，需要调用pthread_mutex_lock, 如果互斥量已经上锁，调用线程将阻塞直到互斥量被解锁。
+
+- 对互斥量进行解锁，需要调用pthread_mutex_unlock
+
+- pthread_mutex_trylock 尝试对互斥量进行加锁，失败时返回EBUSY
+
+- ```c++
+  #include <stdlib.h>
+  #include <pthread.h>
+  
+  struct foo {
+  	int             f_count;
+  	pthread_mutex_t f_lock;
+  	int             f_id;
+  	/* ... more stuff here ... */
+  };
+  
+  struct foo *
+  foo_alloc(int id) /* allocate the object */
+  {
+  	struct foo *fp;
+  
+  	if ((fp = malloc(sizeof(struct foo))) != NULL) {
+  		fp->f_count = 1;
+  		fp->f_id = id;
+  		if (pthread_mutex_init(&fp->f_lock, NULL) != 0) {
+  			free(fp);
+  			return(NULL);
+  		}
+  		/* ... continue initialization ... */
+  	}
+  	return(fp);
+  }
+  
+  void
+  foo_hold(struct foo *fp) /* add a reference to the object */
+  {
+  	pthread_mutex_lock(&fp->f_lock);
+  	fp->f_count++;
+  	pthread_mutex_unlock(&fp->f_lock);
+  }
+  
+  void
+  foo_rele(struct foo *fp) /* release a reference to the object */
+  {
+  	pthread_mutex_lock(&fp->f_lock);
+  	if (--fp->f_count == 0) { /* last reference */
+  		pthread_mutex_unlock(&fp->f_lock);
+  		pthread_mutex_destroy(&fp->f_lock);
+  		free(fp);
+  	} else {
+  		pthread_mutex_unlock(&fp->f_lock);
+  	}
+  }
+  ```
+
+#### 避免死锁
+
+- 如果线程试图对同一个互斥量加锁两次，那么它自身会陷入死锁状态
+
+- 程序中使用一个以上的互斥量时，如果允许线程一直占有第一个互斥量，并且试图锁住第二个互斥量时处于阻塞状态，但是拥有第二个互斥量的线程也在试图锁住第一个互斥量，两个线程都无法向前运行，产生了死锁
+
+- 可能出现的死锁只会发生在一个线程试图锁住另一个线程以相反的顺序锁住的互斥量
+
+- 可以使用pthread_mutex_trylock接口避免死锁，如果已经占有某些锁而且pthread_mutex_trylock接口返回成功，那么就可以前进。如果不能获得锁，可以先释放已经占有的锁，过一段时间再重试
+
+- 在同时需要两个互斥量时，总是让它们以相同的顺序加锁，可以避免死锁
+
+- 如果锁的粒度太粗，就会出现很多线程阻塞等待相同的锁，这可能并不能改善并发性。如果锁的粒度太细，那么过多的锁开销使得系统性能受到影响，而且代码变得复杂
+
+- ```c++
+  #include <stdlib.h>
+  #include <pthread.h>
+  
+  #define NHASH 29
+  #define HASH(id) (((unsigned long)id)%NHASH)
+  
+  struct foo *fh[NHASH];
+  pthread_mutex_t hashlock = PTHREAD_MUTEX_INITIALIZER;
+  
+  struct foo {
+  	int             f_count; /* protected by hashlock */
+  	pthread_mutex_t f_lock;
+  	int             f_id;
+  	struct foo     *f_next; /* protected by hashlock */
+  	/* ... more stuff here ... */
+  };
+  
+  struct foo *
+  foo_alloc(int id) /* allocate the object */
+  {
+  	struct foo	*fp;
+  	int			idx;
+  
+  	if ((fp = malloc(sizeof(struct foo))) != NULL) {
+  		fp->f_count = 1;
+  		fp->f_id = id;
+  		if (pthread_mutex_init(&fp->f_lock, NULL) != 0) {
+  			free(fp);
+  			return(NULL);
+  		}
+  		idx = HASH(id);
+  		pthread_mutex_lock(&hashlock);
+  		fp->f_next = fh[idx];
+  		fh[idx] = fp;
+  		pthread_mutex_lock(&fp->f_lock);
+  		pthread_mutex_unlock(&hashlock);
+  		/* ... continue initialization ... */
+  		pthread_mutex_unlock(&fp->f_lock);
+  	}
+  	return(fp);
+  }
+  
+  void
+  foo_hold(struct foo *fp) /* add a reference to the object */
+  {
+  	pthread_mutex_lock(&hashlock);
+  	fp->f_count++;
+  	pthread_mutex_unlock(&hashlock);
+  }
+  
+  struct foo *
+  foo_find(int id) /* find an existing object */
+  {
+  	struct foo	*fp;
+  
+  	pthread_mutex_lock(&hashlock);
+  	for (fp = fh[HASH(id)]; fp != NULL; fp = fp->f_next) {
+  		if (fp->f_id == id) {
+  			fp->f_count++;
+  			break;
+  		}
+  	}
+  	pthread_mutex_unlock(&hashlock);
+  	return(fp);
+  }
+  
+  void
+  foo_rele(struct foo *fp) /* release a reference to the object */
+  {
+  	struct foo	*tfp;
+  	int			idx;
+  
+  	pthread_mutex_lock(&hashlock);
+  	if (--fp->f_count == 0) { /* last reference, remove from list */
+  		idx = HASH(fp->f_id);
+  		tfp = fh[idx];
+  		if (tfp == fp) {
+  			fh[idx] = fp->f_next;
+  		} else {
+  			while (tfp->f_next != fp)
+  				tfp = tfp->f_next;
+  			tfp->f_next = fp->f_next;
+  		}
+  		pthread_mutex_unlock(&hashlock);
+  		pthread_mutex_destroy(&fp->f_lock);
+  		free(fp);
+  	} else {
+  		pthread_mutex_unlock(&hashlock);
+  	}
+  }
+  ```
+
+#### 函数pthread_mutex_timelock
+
+- pthread_mutex_timelock函数与pthread_mutex_lock是基本等价的，但是在达到超时时间值时，pthread_mutex_timelock不会对互斥量进行加锁，而是返回错误码ETIMEDOUT
+
+- 使用pthread_mutex_timelock避免永久阻塞
+
+- ```c++
+  #include "apue.h"
+  #include <pthread.h>
+  
+  int
+  main(void)
+  {
+  	int err;
+  	struct timespec tout;
+  	struct tm *tmp;
+  	char buf[64];
+  	pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+  
+  	pthread_mutex_lock(&lock);
+  	printf("mutex is locked\n");
+  	clock_gettime(CLOCK_REALTIME, &tout);
+  	tmp = localtime(&tout.tv_sec);
+  	strftime(buf, sizeof(buf), "%r", tmp);
+  	printf("current time is %s\n", buf);
+  	tout.tv_sec += 10;	/* 10 seconds from now */
+  	/* caution: this could lead to deadlock */
+  	err = pthread_mutex_timedlock(&lock, &tout);
+  	clock_gettime(CLOCK_REALTIME, &tout);
+  	tmp = localtime(&tout.tv_sec);
+  	strftime(buf, sizeof(buf), "%r", tmp);
+  	printf("the time is now %s\n", buf);
+  	if (err == 0)
+  		printf("mutex locked again!\n");
+  	else
+  		printf("can't lock mutex again: %s\n", strerror(err));
+  	exit(0);
+  }
+  ```
+
+#### 读写锁
+
+- 读写锁与互斥量类似，允许更高的并行性，互斥量要么是锁住状态，要么就是不加锁状态，而且一次只有一个线程可以对齐加锁
+
+- 读写锁有三种状态
+
+  - 读模式下加锁状态
+  - 写模式下加锁状态
+  - 不加锁状态
+  - 一次只有一个线程可以占有写模式的读写锁，但是多个线程可以同时占有读模式的读写锁
+
+- 当读写锁是写加锁状态时，在这个锁被解锁之前，所有试图对这个锁加锁的线程都会被阻塞。
+
+- 当读写锁是在读加锁状态时，所有试图以读模式对它进行加锁的线程都可以得到访问权，但是任何以写模式对此锁加锁的线程都会阻塞，直到所有的线程释放它们的读锁
+
+- 当读写锁处于读模式锁住时，一个线程试图以写模式获取锁时，读写锁通常会阻塞随后的读模式锁请求
+
+- 读写锁也叫共享互斥锁
+
+- pthread_rwlock_init进行初始化
+
+- pthread_rwlock_destory释放资源
+
+- pthread_rwlock_rdlock　读模式下锁住读写锁
+
+- pthread_rwlock_wrlock 写模式下锁定读写锁
+
+- pthread_rwlock_unlock解锁
+
+- pthread_rwlock_trylock
+
+- pthread_rwlock_trylock 可以获取锁时，返回0,否则返回错误EBUSY
+
+- ```c++
+  #include <stdlib.h>
+  #include <pthread.h>
+  
+  struct job {
+  	struct job *j_next;
+  	struct job *j_prev;
+  	pthread_t   j_id;   /* tells which thread handles this job */
+  	/* ... more stuff here ... */
+  };
+  
+  struct queue {
+  	struct job      *q_head;
+  	struct job      *q_tail;
+  	pthread_rwlock_t q_lock;
+  };
+  
+  /*
+   * Initialize a queue.
+   */
+  int
+  queue_init(struct queue *qp)
+  {
+  	int err;
+  
+  	qp->q_head = NULL;
+  	qp->q_tail = NULL;
+  	err = pthread_rwlock_init(&qp->q_lock, NULL);
+  	if (err != 0)
+  		return(err);
+  	/* ... continue initialization ... */
+  	return(0);
+  }
+  
+  /*
+   * Insert a job at the head of the queue.
+   */
+  void
+  job_insert(struct queue *qp, struct job *jp)
+  {
+  	pthread_rwlock_wrlock(&qp->q_lock);
+  	jp->j_next = qp->q_head;
+  	jp->j_prev = NULL;
+  	if (qp->q_head != NULL)
+  		qp->q_head->j_prev = jp;
+  	else
+  		qp->q_tail = jp;	/* list was empty */
+  	qp->q_head = jp;
+  	pthread_rwlock_unlock(&qp->q_lock);
+  }
+  
+  /*
+   * Append a job on the tail of the queue.
+   */
+  void
+  job_append(struct queue *qp, struct job *jp)
+  {
+  	pthread_rwlock_wrlock(&qp->q_lock);
+  	jp->j_next = NULL;
+  	jp->j_prev = qp->q_tail;
+  	if (qp->q_tail != NULL)
+  		qp->q_tail->j_next = jp;
+  	else
+  		qp->q_head = jp;	/* list was empty */
+  	qp->q_tail = jp;
+  	pthread_rwlock_unlock(&qp->q_lock);
+  }
+  
+  /*
+   * Remove the given job from a queue.
+   */
+  void
+  job_remove(struct queue *qp, struct job *jp)
+  {
+  	pthread_rwlock_wrlock(&qp->q_lock);
+  	if (jp == qp->q_head) {
+  		qp->q_head = jp->j_next;
+  		if (qp->q_tail == jp)
+  			qp->q_tail = NULL;
+  		else
+  			jp->j_next->j_prev = jp->j_prev;
+  	} else if (jp == qp->q_tail) {
+  		qp->q_tail = jp->j_prev;
+  		jp->j_prev->j_next = jp->j_next;
+  	} else {
+  		jp->j_prev->j_next = jp->j_next;
+  		jp->j_next->j_prev = jp->j_prev;
+  	}
+  	pthread_rwlock_unlock(&qp->q_lock);
+  }
+  
+  /*
+   * Find a job for the given thread ID.
+   */
+  struct job *
+  job_find(struct queue *qp, pthread_t id)
+  {
+  	struct job *jp;
+  
+  	if (pthread_rwlock_rdlock(&qp->q_lock) != 0)
+  		return(NULL);
+  
+  	for (jp = qp->q_head; jp != NULL; jp = jp->j_next)
+  		if (pthread_equal(jp->j_id, id))
+  			break;
+  
+  	pthread_rwlock_unlock(&qp->q_lock);
+  	return(jp);
+  }
+  ```
+
+#### 带有超时的读写锁
+
+- pthred_rwlock_timerdlock
+- pthread_rwlock_timedwrloc
+
+#### 条件变量
+
+- 条件变量是线程可用的另一种同步机制，条件变量给多个线程提供了一个会和的场合。条件变量与互斥量一起使用时，允许线程以无竞争方式等待特定条件的发生
+
+- 条件本身是由互斥量保护的
+
+- pthread_cond_t数据类型的条件变量
+
+- 初始化　pthread_cond_init()
+
+- pthread_cond_destory()
+
+- pthread_cond_wait 等待条件变量为真　　互斥量对条件进行保护　调用者把锁住的互斥量传给函数，函数然后自动把调用线程放到等待条件的线程列表上，对互斥量进行解锁。pthread_cond_wait返回时，互斥量再次被锁住
+
+- pthread_cond_timewait　如果超时到期条件还是没有出现，pthread_cond_timewait将重新获取互斥量，然后返回错误ETIMEDOUT
+
+- 从pthread_cond_wait或pthread_cond_timewait调用成功返回时，线程需要重新计算条件，因为另一个线程可能已经在运行并改变了条件
+
+- pthread_cond_signal函数至少能唤醒一个等待该条件的线程
+
+- pthread_cond_broadcast函数则能唤醒等待该条件的所有线程
+
+- ```c++
+  #include <pthread.h>
+  
+  struct msg {
+  	struct msg *m_next;
+  	/* ... more stuff here ... */
+  };
+  
+  struct msg *workq;
+  
+  pthread_cond_t qready = PTHREAD_COND_INITIALIZER;
+  
+  pthread_mutex_t qlock = PTHREAD_MUTEX_INITIALIZER;
+  
+  void
+  process_msg(void)
+  {
+  	struct msg *mp;
+  
+  	for (;;) {
+  		pthread_mutex_lock(&qlock);
+  		while (workq == NULL)
+  			pthread_cond_wait(&qready, &qlock);
+  		mp = workq;
+  		workq = mp->m_next;
+  		pthread_mutex_unlock(&qlock);
+  		/* now process the message mp */
+  	}
+  }
+  
+  void
+  enqueue_msg(struct msg *mp)
+  {
+  	pthread_mutex_lock(&qlock);
+  	mp->m_next = workq;
+  	workq = mp;
+  	pthread_mutex_unlock(&qlock);
+  	pthread_cond_signal(&qready);
+  }
+  ```
+
+#### 自旋锁
+
+- 自旋锁与互斥量类似，但它不是通过休眠使进程阻塞，而是在获取锁之前一直处于忙等(自旋)阻塞状态
+- 自旋锁可用于以下情况:锁被持有的时间短，而且线程并不希望在重新调度上花费太多成本
+- 自旋锁通常作为底层原语用于实现其他类型的锁
+- 当线程自旋锁变为可用时，CPU不能做其他的事情
+- pthread_spin_init
+- pthread_spin_destroy
+- pthread_spin_lock
+- pthread_spin_trylock
+- pthread_spin_unlock
+
+#### 屏障
+
+- 用户协调多个线程并行工作的同步机制，屏障允许每个线程等待，直到所有的合作线程都到达某一点，然后从该点继续执行，　pthread_join就是一种屏障
+
+- pthread_barrier_init对屏障进行初始化
+
+- pthread_barrier_destroy进行反初始化
+
+- 可以使用pthread_barrier_wait函数来表明，线程已经完成工作，准备等所有其他线程赶上来，调用pthread_barrier_wait的线程在屏障计数未满足条件时，会进入休眠状态，如果该线程是最后一个调用的线程，就满足了屏障计数，所有的线程都被唤醒  
+
+- 使用8个线程分解了800万个数的排序工作，每个线程用堆排序算法对100万个进行排序，然后主线程调用一个函数对这些结果进行合并
+
+- ```c++
+  #include "apue.h"
+  #include <pthread.h>
+  #include <limits.h>
+  #include <sys/time.h>
+  
+  #define NTHR   8				/* number of threads */
+  #define NUMNUM 8000000L			/* number of numbers to sort */
+  #define TNUM   (NUMNUM/NTHR)	/* number to sort per thread */
+  
+  long nums[NUMNUM];
+  long snums[NUMNUM];
+  
+  pthread_barrier_t b;
+  
+  #ifdef SOLARIS
+  #define heapsort qsort
+  #else
+  extern int heapsort(void *, size_t, size_t,
+                      int (*)(const void *, const void *));
+  #endif
+  
+  /*
+   * Compare two long integers (helper function for heapsort)
+   */
+  int
+  complong(const void *arg1, const void *arg2)
+  {
+  	long l1 = *(long *)arg1;
+  	long l2 = *(long *)arg2;
+  
+  	if (l1 == l2)
+  		return 0;
+  	else if (l1 < l2)
+  		return -1;
+  	else
+  		return 1;
+  }
+  
+  /*
+   * Worker thread to sort a portion of the set of numbers.
+   */
+  void *
+  thr_fn(void *arg)
+  {
+  	long	idx = (long)arg;
+  
+  	heapsort(&nums[idx], TNUM, sizeof(long), complong);
+  	pthread_barrier_wait(&b);
+  
+  	/*
+  	 * Go off and perform more work ...
+  	 */
+  	return((void *)0);
+  }
+  
+  /*
+   * Merge the results of the individual sorted ranges.
+   */
+  void
+  merge()
+  {
+  	long	idx[NTHR];
+  	long	i, minidx, sidx, num;
+  
+  	for (i = 0; i < NTHR; i++)
+  		idx[i] = i * TNUM;
+  	for (sidx = 0; sidx < NUMNUM; sidx++) {
+  		num = LONG_MAX;
+  		for (i = 0; i < NTHR; i++) {
+  			if ((idx[i] < (i+1)*TNUM) && (nums[idx[i]] < num)) {
+  				num = nums[idx[i]];
+  				minidx = i;
+  			}
+  		}
+  		snums[sidx] = nums[idx[minidx]];
+  		idx[minidx]++;
+  	}
+  }
+  
+  int
+  main()
+  {
+  	unsigned long	i;
+  	struct timeval	start, end;
+  	long long		startusec, endusec;
+  	double			elapsed;
+  	int				err;
+  	pthread_t		tid;
+  
+  	/*
+  	 * Create the initial set of numbers to sort.
+  	 */
+  	srandom(1);
+  	for (i = 0; i < NUMNUM; i++)
+  		nums[i] = random();
+  
+  	/*
+  	 * Create 8 threads to sort the numbers.
+  	 */
+  	gettimeofday(&start, NULL);
+  	pthread_barrier_init(&b, NULL, NTHR+1);
+  	for (i = 0; i < NTHR; i++) {
+  		err = pthread_create(&tid, NULL, thr_fn, (void *)(i * TNUM));
+  		if (err != 0)
+  			err_exit(err, "can't create thread");
+  	}
+  	pthread_barrier_wait(&b);
+  	merge();
+  	gettimeofday(&end, NULL);
+  
+  	/*
+  	 * Print the sorted list.
+  	 */
+  	startusec = start.tv_sec * 1000000 + start.tv_usec;
+  	endusec = end.tv_sec * 1000000 + end.tv_usec;
+  	elapsed = (double)(endusec - startusec) / 1000000.0;
+  	printf("sort took %.4f seconds\n", elapsed);
+  	for (i = 0; i < NUMNUM; i++)
+  		printf("%ld\n", snums[i]);
+  	exit(0);
+  }
+  ```
 

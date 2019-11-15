@@ -1206,3 +1206,205 @@
   - 不小心忘记释放已分配块
   - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-12 19-42-23.png)
 
+
+
+## 第十章　系统级I/O
+
+- 输入操作是从I/O设备复制数据到主存，输出操作从主存复制数据到I/O设备
+- 在Linux中，是通过内核提供的系统级Unix I/O函数来实现较高级别的I/O函数的
+
+### 10.1 Unix I/O
+
+- 一个Linux文件就是一个m字节的序列，所有的I/O设备(如网络、磁盘和终端)都被模型化为文件，所有的输入和输出都被当作对相应文件的读和写来执行
+- Unix I/O
+  - 打开文件
+  - Linux shell创建的每个进程开始时都有三个打开的文件: 标准输入　标准输出　标准错误
+  - 改变当前的文件位置
+  - 读写文件
+  - 关闭文件
+
+### 10.2 文件
+
+- 每个Linux文件都有一个类型来表明它在系统中的角色
+  - 普通文件
+    - 文本文件　只含ASCII或Unicode字符的普通文件
+    - 二进制文件
+  - 目录
+    - 是包含一组链接的文件，每个链接都将一个文件名映射到一个文件
+  - 套接字
+    - 用来与另一个进程进行跨网络通信的文件
+  - 命令通道
+  - 符号链接
+  - 字符
+  - 块设备
+
+### 10.3 打开和关闭文件
+
+- open
+- close
+
+### 10.4 读和写文件
+
+- read
+- write
+- size_t 被定义为unsigned long   ssize_t被定义为long
+- 有时，read和write传送的字节比应用程序要求的要少，这些不足值不表示有错误
+  - 读时遇到EOF
+  - 从终端读文本行
+  - 读和写网络套接字
+
+### 10.5 用RIO包健壮地读写
+
+- Robust I/O (RIO),会自动处理不足值
+  - 无缓冲的输入输出函数，直接在内存和文件之间传送数据，没有应用级缓冲
+  - 带缓冲的输入函数，文件的内容缓存在应用级缓冲区内
+- RIO的无缓冲的输入输出函数
+  - rio_readn
+  - rio_writen
+  - 允许被中断的系统调用，且在必要时重启
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-10-29.png)
+
+- RIO的带缓冲的输入函数
+  - 从一个内部读缓冲区复制一个文本行，当缓冲区变空时，会自动调用read重新填满缓冲区
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-57-44.png)
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-58-09.png)
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-58-32.png)
+
+### 10.6 读取文件元数据
+
+- stat
+- fstat
+
+### 10.7 读取目录内容
+
+- opendir 以路径名为参数，返回指向目录流的指针
+- readdir 返回指向流dirp中下一个目录项的指针
+- closedir关闭流并释放其所有的资源
+
+### 10.8 共享文件
+
+- 内核用三个相关的数据结构来表示打开的文件
+  - 描述符表，每个进程都有它独立的描述符表
+  - 文件表，打开文件的集合是由一张文件表来表示的，所有的进程共享这张表，每个文件表项包括当前的文件位置、引用技术、一个指向v-node表中对应表项的指针
+  - v-node表　所有进程共享这张v-node表，每个表项包含stat结构中的大多数信息
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-27-30.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-28-32.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-29-41.png)
+
+### 10.4 I/O重定向
+
+- ls >foo.txt
+- dup2函数复制描述符表表项oldfd到描述符表项newfd
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-36-25.png)
+
+### 10.10 标准I/O
+
+- C语言定义了一组高级输入输出函数，称为标准I/O库
+- fopen fclose
+- fread fwrite
+- fgets fputs
+- scanf printf
+- 标准I/O库将一个打开的文件模型化为一个流，一个流就是一个指向FILE类型的结构的指针
+- 流缓冲区的目的和RIO读缓冲区的一样，就是使开销较高的Linux I/O系统调用的数量尽可能小
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-41-10.png)
+
+### 10.11 I/O函数
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-41-54.png)
+
+- 较高级别的I/O和标准I/O都是基于Unix I/O函数实现的
+- 标准I/O函数提供了Unix I/O函数的一个更加完善的带缓冲的替代品
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-44-53.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-48-05.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-13 20-48-39.png)
+
+## 第11章　网络编程
+
+### 11.1 客户端-服务器编程模型
+
+- 客户端和服务器是进程
+
+### 11.2 网络
+
+### 11.3 全球IP因特网
+
+- IP地址
+
+  - TCP/IP为任意整数数据项定义了统一的网络字节顺序(大端字节顺序)
+
+  - hostname -i  检测本机的网络地址
+  - hostname  本机的域名
+
+- 因特网域名
+
+  - nslookup程序能展示与某个IP地址对应的域名
+  - 每台因特网主机都有本地定义的域名　localhost, 映射为loopback 地址127.0.0.1
+  - nslookup localhost
+
+- 因特网连接
+
+
+
+### 11.4 套接字接口
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 17-23-46.png)
+
+- 套接字地址结构
+
+  - _in后缀是互联网的缩写
+
+- 主机和服务的转换
+
+  - LInux提供了getaddrinfo和getnameinfo实现二进制套接字地址结构和主机名、主机地址、服务名和端口号的字符串表示之间的相互转换。使得能编写独立于任何特定版本的IP协议的网络程序
+
+  - getaddrinfo函数
+
+    - 将主机名、主机地址、服务名和端口号的字符串表示转化成套接字地址结构
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 17-32-51.png)
+
+    - 调用freeaddrinfo释放该链表
+
+  - getnameinfo函数
+
+    - 将一个套接字名转化成相应的主机和服务名字符串
+
+- 套接字接口的辅助函数
+
+  - open_clientfd函数　客户端建立与服务器的连接
+  - open_listenfd函数　服务器创建一个监听描述符，准备好接收连接请求
+
+- echo客户端和服务器的示例
+
+- EOF
+
+  - EOF是由内核检测到的一种条件，应用程序在它接收到一个由read函数返回的零返回码时，它就会发现出EOF条件。对于磁盘文件，当前文件位置超出文件长度时，会发生EOF,对于因特网连接，当一个进程关闭连接它的那一端时，会发生EOF,连接另一端的进程在试图读取流中最后一个字节之后的字节时，会检测到EOF
+
+### 11.5 Web服务器
+
+- Web内容
+
+  - 内容是一个与MIME类型相关的字节序列
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 19-09-13.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-14 19-10-07.png)
+
+  - 通用资源定位符(URL)
+    - 客户端使用前缀
+    - 服务器端使用后缀
+
+- http事务
+
+  - Http请求
+  - Http响应
+
+- 服务动态内容
+
+  - GCI(通用网关接口)
+  - 客户端如何将程序参数传递给服务器
+  - 服务器如何将参数传递给子进程
+  - 服务器如何将其他信息传递给子进程
+  - 子进程将它的输出发送到哪里
