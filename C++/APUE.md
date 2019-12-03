@@ -2178,3 +2178,1887 @@
   }
   ```
 
+## 第12章　线程控制
+
+### 12.2 线程限制
+
+- 通过使用sysconf函数查询
+
+### 12.3 线程属性
+
+- 每个对象关联的不同属性
+
+- 可以使用pthread_attr_t结构修改线程默认属性，并把这些属性与创建的线程联系起来
+
+- 可以使用pthread_attr_init函数初始化pthread_attr_t结构
+
+- pthread_attr_destory
+
+- 线程属性结构对应用程序来说是不透明的
+
+- 线程的分离状态属性　　detachstat
+
+  - 可以调用pthread_attr_getdetachstate函数获取当前的detachstat线程属性
+
+  - 可以使用pthread_attr_setdetachstat设置线程的detachstat属性
+
+  - ```c++
+    #include "apue.h"
+    #include <pthread.h>
+    
+    int
+    makethread(void *(*fn)(void *), void *arg)
+    {
+    	int				err;
+    	pthread_t		tid;
+    	pthread_attr_t	attr;
+    
+    	err = pthread_attr_init(&attr);
+    	if (err != 0)
+    		return(err);
+    	err = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    	if (err == 0)
+    		err = pthread_create(&tid, &attr, fn, arg);
+    	pthread_attr_destroy(&attr);
+    	return(err);
+    }
+    ```
+
+    
+
+- 线程栈末尾的警戒缓冲区大小  guardsize
+
+  - 控制着线程栈末尾之后用以避免栈溢出的扩展内存的大小
+
+- 线程栈的最低地址    stackaddr
+
+- 线程栈的最小长度   stacksize
+
+  - 可以使用pthread_attr_getstack和pthread_attr_setstack对线程栈属性进行管理
+  - 进程中只有一个栈，大小不是问题。对于线程，同样大小的虚地址空间必须被所有的线程栈共享，如果应用程序使用了许多线程，以致这些线程栈的累计大小超过了可用的虚地址空间，就需要减少默认的线程栈大小
+  - 如果线程栈的虚地址空间都用完了，那么可用使用malloc或mmap来为可替代的栈分配空间，并用pthread_attr_setstack函数来改变新建线程的栈位置
+  - 应用程序可通过pthread_attr_getstacksize和pthread_attr_setstacksize函数读取或设置线程属性stacksize
+
+### 12.4 同步属性
+
+- 互斥量属性
+
+  - 用pthread_mutexattr_init初始化pthread_mutexattr_t结构　　将用默认的互斥量属性初始化
+
+  - 用pthread_mutexattr_destroy来反初始化
+
+  - 进程共享属性
+
+    - 在进程中，多个线程可以访问同一个同步对象。进程共享互斥量属性设置为PTHREAD_PROCESS_PRIVATE
+    - 设置为PTHREAD_PROCESS_SHARED时，多个进程之间共享的内存数据块中分配的互斥量可用于这些进程的同步
+    - pthread_mutexattr_getpshared和pthread_mutexattr_setpshared 查看或修改进程共享属性
+
+  - 健壮属性
+
+    - pthread_mutexattr_getrobust和pthread_mutexattr_setrobust 查看或修改健壮的互斥量属性的值
+    - 默认值是PTHREAD_MUTEX_STALLED持有互斥量的进程终止时不需要采取特别的动作
+    - 另一个值是PTHREAD_MUTEX_ROBUST
+    - 线程可以调用pthread_mutex_consistent函数，指明与该互斥量相关的状态在互斥量解锁之前是一致的
+
+  - 类型属性
+
+    -  PTHREAD_MUTEX_NORMAL
+
+    - PTHREAD_MUTEX_ERRORCHECK
+
+    - PTHREAD_MUTEX_RECURSIVE　允许没有解锁时重新加锁
+
+    - PTHREAD_MUTEX_DEFAULT
+
+    - 可以用pthread_mutexattr_gettype函数获得互斥量类型属性
+
+    - pthread_mutexattr_settype修改互斥量类型属性
+
+- 读写锁属性
+
+  - pthread_rwlockattr_init初始化pthread_rwlockattr_t结构，pthread_rwlockattr_destroy反初始化
+  - 读写锁支持的唯一属性是进程共享属性，与互斥量的进程共享属性是相同的
+  - pthread_rwlockattr_getpshared
+  - pthread_rwlockattr_setpshared
+
+- 条件变量属性
+
+  - pthread_condattr_init   pthread_condattr_destroy初始化和反初始化条件变量属性
+
+  - 进程共享属性
+  - 时钟属性　控制计算pthread_cond_timedwait函数的超时参数采用的是哪个时钟
+
+- 屏障属性
+
+  - 只有进程共享属性
+
+### 12.5 重入
+
+- 如果一个函数在相同的时间点可以被多个线程安全地调用，就称该函数是线程安全的
+
+- 很多函数并不是线程安全的，因为它们返回的数据存放在静态的内存缓冲区中，通过修改接口，要求调用者自己提供缓冲区可以使函数变为线程安全
+
+- 如果一个函数对多个线程来说是可重入的，就说这个函数是线程安全的，但不能说明对信号处理程序来说该函数也是可重入的
+
+- 提供了以线程安全的方式管理FILE对象的方法: 可以使用flockfile和ftrylockfile获取给定FILE对象关联的锁
+
+### 12.6 线程特定数据
+
+- 线程私有数据
+  - 防止某个线程的数据与其他线程的数据相混淆
+  - 提供了基于进程的接口适应多线程环境的机制
+- 一个进程中的所有线程都可以访问这个进程的整个地址空间，除了使用寄存器以外，一个线程没办法阻止另一个线程访问它的数据
+- 创建与数据关联的键　pthread_key_create
+- 调用pthread_key_delete来取消键与线程特定数据值之间的关联关系
+- pthread_once  如果每个线程都调用pthread_once,系统就能保证初始化例程initfn只被调用一次
+- pthread_setspecific函数把键和线程特定数据关联起来
+- pthread_getspecific函数获得线程特定数据的地址
+- 可以使用线程特定数据来维护每个线程的数据缓冲副本
+- 当线程调用pthread_exit或者线程执行返回，正常退出时，析构函数就会被调用
+- malloc函数本身并不是异步信号安全的
+
+### 12.7 取消选项
+
+- 可取消状态　PTHREAD_CANCEL_ENABLE          PTHREAD_CANCEL_DISABLE
+- pthread_setcancelstate函数修改可取消状态
+- 线程在取消请求发出以后还是继续运行，直到线程到达某个取消点
+- 调用pthread_testcancel函数在程序中添加自己的取消点
+- 默认的取消类似是推迟取消，即在调用pthread_cancel后，在线程到达取消点前，并不会出现真的取消
+- 可以调用pthread_setcanceltype来修改取消类型
+
+### 12.8 线程和信号
+
+- 信号的处理是进程中所有线程共享的
+
+- 进程中的信号是递送到单个线程的
+
+- pthread_sigmask,工作在线程中，与sigprocmask基本相同
+
+- 线程可以通过调用sigwait等待一个或多个信号的出现
+
+- 要把信号发送给线程，可以调用pthread_kill
+
+- 可以使用独立的控制线程进行信号处理，新建线程继承了现有的信号屏蔽字
+
+- 为了避免错误行为发生，线程在调用sigwait之前，必须阻塞那些它正在等待的信号，sigwai会原子地取消信号集的阻塞状态，直到有新的信号被递送，在返回之前，sigwait将恢复线程的信号屏蔽字
+
+- ```c++
+  #include "apue.h"
+  #include <pthread.h>
+  
+  int			quitflag;	/* set nonzero by thread */
+  sigset_t	mask;
+  
+  pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+  pthread_cond_t waitloc = PTHREAD_COND_INITIALIZER;
+  
+  void *
+  thr_fn(void *arg)
+  {
+  	int err, signo;
+  
+  	for (;;) {
+  		err = sigwait(&mask, &signo);
+  		if (err != 0)
+  			err_exit(err, "sigwait failed");
+  		switch (signo) {
+  		case SIGINT:
+  			printf("\ninterrupt\n");
+  			break;
+  
+  		case SIGQUIT:
+  			pthread_mutex_lock(&lock);
+  			quitflag = 1;
+  			pthread_mutex_unlock(&lock);
+  			pthread_cond_signal(&waitloc);
+  			return(0);
+  
+  		default:
+  			printf("unexpected signal %d\n", signo);
+  			exit(1);
+  		}
+  	}
+  }
+  
+  int
+  main(void)
+  {
+  	int			err;
+  	sigset_t	oldmask;
+  	pthread_t	tid;
+  
+  	sigemptyset(&mask);
+  	sigaddset(&mask, SIGINT);
+  	sigaddset(&mask, SIGQUIT);
+  	if ((err = pthread_sigmask(SIG_BLOCK, &mask, &oldmask)) != 0)
+  		err_exit(err, "SIG_BLOCK error");
+  
+  	err = pthread_create(&tid, NULL, thr_fn, 0);
+  	if (err != 0)
+  		err_exit(err, "can't create thread");
+  
+  	pthread_mutex_lock(&lock);
+  	while (quitflag == 0)
+  		pthread_cond_wait(&waitloc, &lock);
+  	pthread_mutex_unlock(&lock);
+  
+  	/* SIGQUIT has been caught and is now blocked; do whatever */
+  	quitflag = 0;
+  
+  	/* reset signal mask which unblocks SIGQUIT */
+  	if (sigprocmask(SIG_SETMASK, &oldmask, NULL) < 0)
+  		err_sys("SIG_SETMASK error");
+  	exit(0);
+  }
+  ```
+
+
+
+### 12.9 线程和fork
+
+- 当线程调用fork时，就为子进程创建了整个进程地址空间的副本
+
+- 在子进程内部，只存在一个线程，它是由父进程中调用fork的线程的副本构成
+
+- POSIX.1声明，在fork返回和子进程调用其中一个exec函数之间，子进程只能调用异步信号安全的函数
+
+- pthread_atfork函数最多可以安装3个帮助清理锁的函数
+
+- ```c++
+  #include "apue.h"
+  #include <pthread.h>
+  
+  pthread_mutex_t lock1 = PTHREAD_MUTEX_INITIALIZER;
+  pthread_mutex_t lock2 = PTHREAD_MUTEX_INITIALIZER;
+  
+  void
+  prepare(void)
+  {
+  	int err;
+  
+  	printf("preparing locks...\n");
+  	if ((err = pthread_mutex_lock(&lock1)) != 0)
+  		err_cont(err, "can't lock lock1 in prepare handler");
+  	if ((err = pthread_mutex_lock(&lock2)) != 0)
+  		err_cont(err, "can't lock lock2 in prepare handler");
+  }
+  
+  void
+  parent(void)
+  {
+  	int err;
+  
+  	printf("parent unlocking locks...\n");
+  	if ((err = pthread_mutex_unlock(&lock1)) != 0)
+  		err_cont(err, "can't unlock lock1 in parent handler");
+  	if ((err = pthread_mutex_unlock(&lock2)) != 0)
+  		err_cont(err, "can't unlock lock2 in parent handler");
+  }
+  
+  void
+  child(void)
+  {
+  	int err;
+  
+  	printf("child unlocking locks...\n");
+  	if ((err = pthread_mutex_unlock(&lock1)) != 0)
+  		err_cont(err, "can't unlock lock1 in child handler");
+  	if ((err = pthread_mutex_unlock(&lock2)) != 0)
+  		err_cont(err, "can't unlock lock2 in child handler");
+  }
+  
+  void *
+  thr_fn(void *arg)
+  {
+  	printf("thread started...\n");
+  	pause();
+  	return(0);
+  }
+  
+  int
+  main(void)
+  {
+  	int			err;
+  	pid_t		pid;
+  	pthread_t	tid;
+  
+  	if ((err = pthread_atfork(prepare, parent, child)) != 0)
+  		err_exit(err, "can't install fork handlers");
+  	if ((err = pthread_create(&tid, NULL, thr_fn, 0)) != 0)
+  		err_exit(err, "can't create thread");
+  
+  	sleep(2);
+  	printf("parent about to fork...\n");
+  
+  	if ((pid = fork()) < 0)
+  		err_quit("fork failed");
+  	else if (pid == 0)	/* child */
+  		printf("child returned from fork\n");
+  	else		/* parent */
+  		printf("parent returned from fork\n");
+  	exit(0);
+  }
+  ```
+
+### 12.10 线程和I/O
+
+- 使用pread,使偏移量的设定和数据的读取成为一个原子操作
+
+
+
+## 第13章 守护进程
+
+- 守护进程是生存期长的一种进程，常常在系统引导装入时启动，仅在系统关闭时才终止。因为它们没有控制终端，所以是在后台运行的
+
+### 13.2 守护进程的特征
+
+-  ps -efj　内核守护进程的名字出现在方括号中
+- 父进程ID为0的各进程通常是内核进程，作为系统引导装入过程的一部分而启动，内核进程是特殊的，通常存在于系统的整个生命期，以超级用户特权运行，无控制终端，无命令行
+- init是例外，它是一个由内核在引导装入时启动的用户层次的命令
+- 使用一个kthread的特殊内核进程来创建其他内核进程
+- kswapd  flush  sync_supers  jbd
+- 进程1通常是init,是一个内核守护进程
+- rpcbind
+- rsyslogd
+- inetd 帧听系统网络接口
+- 内核守护进程　用户层守护进程
+- 用户层守护进程的父进程是init进程
+
+### 13.3 编程规则
+
+- 首先要做的是调用umask将文件模式创建屏蔽字设置为一个已知值
+- 调用fork,然后使父进程exit
+- 调用setsid创建一个新会话
+- 将当前工作目录改为根目录
+- 关闭不再需要的文件描述符
+- 某些守护进程打开/dev/null使其具有文件描述符0 1 2
+
+### 13.4 出错记录
+
+- 内核例程可以调用log函数，任何一个用户进程都可以通过打开并读取 /dev/klog设备来读取这些消息
+- 大多数用户进程(守护进程)可以调用syslog函数来产生日志消息，被发送到UNIX域数据报套接字/dev/log
+- 可将日志消息发送到UDP端口514
+- syslogd守护进程读取这三种日志消息，守护进程在启动时读取配置文件/etc/syslog.conf
+- openlog
+- syslog产生一个日志消息
+- setlogmask函数用于设置进程的记录优先级屏蔽字
+- closelog
+- logger程序可作为向syslog设施发送日志消息的方法，logger命令是专门为以非交互式运行的需要产生日志消息的shell脚本设计的
+- vsyslog
+- 大多数syslog实现将使消息短时间处于队列中
+
+### 13.5 单实例守护进程
+
+- 为了正常运行，某些守护进程会实现为，在任一时刻只运行该守护进程的一个副本
+
+- 文件和记录锁方式，保证一个守护进程只有一个副本在运行，如果每一个守护进程创建一个有固定名字的文件，并在该文件的整体上加一把写锁，那么只允许创建一把这样的写锁。
+
+- ```c++
+  #include <unistd.h>
+  #include <stdlib.h>
+  #include <fcntl.h>
+  #include <syslog.h>
+  #include <string.h>
+  #include <errno.h>
+  #include <stdio.h>
+  #include <sys/stat.h>
+  
+  #define LOCKFILE "/var/run/daemon.pid"
+  #define LOCKMODE (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH)
+  
+  extern int lockfile(int);
+  
+  int
+  already_running(void)
+  {
+  	int		fd;
+  	char	buf[16];
+  
+  	fd = open(LOCKFILE, O_RDWR|O_CREAT, LOCKMODE);
+  	if (fd < 0) {
+  		syslog(LOG_ERR, "can't open %s: %s", LOCKFILE, strerror(errno));
+  		exit(1);
+  	}
+  	if (lockfile(fd) < 0) {
+  		if (errno == EACCES || errno == EAGAIN) {
+  			close(fd);
+  			return(1);
+  		}
+  		syslog(LOG_ERR, "can't lock %s: %s", LOCKFILE, strerror(errno));
+  		exit(1);
+  	}
+  	ftruncate(fd, 0);
+  	sprintf(buf, "%ld", (long)getpid());
+  	write(fd, buf, strlen(buf)+1);
+  	return(0);
+  }
+  ```
+
+- 如果该文件已经加了锁，那么lockfile函数将失败
+
+
+
+### 13.5 守护进程的惯例
+
+- 若守护进程使用锁文件，该文件通常存储在/var/run目录中，锁文件的名字是name.pid
+
+- 配置文件naem.conf在/etc目录中
+
+- 守护进程可用命令行启动，通常是由系统初始化脚本之一(/etc/rc* 或/etc/init.d/*)启动的。在/etc/inittab中为该守护进程包括respawn记录项，这样，init将重新启动终止的守护进程
+
+- 守护进程将读取SIGHUP信号，重新读取配置文件
+
+- ```c++
+  #include "apue.h"
+  #include <pthread.h>
+  #include <syslog.h>
+  
+  sigset_t	mask;
+  
+  extern int already_running(void);
+  
+  void
+  reread(void)
+  {
+  	/* ... */
+  }
+  
+  void *
+  thr_fn(void *arg)
+  {
+  	int err, signo;
+  
+  	for (;;) {
+  		err = sigwait(&mask, &signo);
+  		if (err != 0) {
+  			syslog(LOG_ERR, "sigwait failed");
+  			exit(1);
+  		}
+  
+  		switch (signo) {
+  		case SIGHUP:
+  			syslog(LOG_INFO, "Re-reading configuration file");
+  			reread();
+  			break;
+  
+  		case SIGTERM:
+  			syslog(LOG_INFO, "got SIGTERM; exiting");
+  			exit(0);
+  
+  		default:
+  			syslog(LOG_INFO, "unexpected signal %d\n", signo);
+  		}
+  	}
+  	return(0);
+  }
+  
+  int
+  main(int argc, char *argv[])
+  {
+  	int					err;
+  	pthread_t			tid;
+  	char				*cmd;
+  	struct sigaction	sa;
+  
+  	if ((cmd = strrchr(argv[0], '/')) == NULL)
+  		cmd = argv[0];
+  	else
+  		cmd++;
+  
+  	/*
+  	 * Become a daemon.
+  	 */
+  	daemonize(cmd);
+  
+  	/*
+  	 * Make sure only one copy of the daemon is running.
+  	 */
+  	if (already_running()) {
+  		syslog(LOG_ERR, "daemon already running");
+  		exit(1);
+  	}
+  
+  	/*
+  	 * Restore SIGHUP default and block all signals.
+  	 */
+  	sa.sa_handler = SIG_DFL;
+  	sigemptyset(&sa.sa_mask);
+  	sa.sa_flags = 0;
+  	if (sigaction(SIGHUP, &sa, NULL) < 0)
+  		err_quit("%s: can't restore SIGHUP default");
+  	sigfillset(&mask);
+  	if ((err = pthread_sigmask(SIG_BLOCK, &mask, NULL)) != 0)
+  		err_exit(err, "SIG_BLOCK error");
+  
+  	/*
+  	 * Create a thread to handle SIGHUP and SIGTERM.
+  	 */
+  	err = pthread_create(&tid, NULL, thr_fn, 0);
+  	if (err != 0)
+  		err_exit(err, "can't create thread");
+  
+  	/*
+  	 * Proceed with the rest of the daemon.
+  	 */
+  	/* ... */
+  	exit(0);
+  }
+  ```
+
+### 13.7 客户进程- 服务器进程模型
+
+- 守护进程常常用作服务器进程
+
+## 第14章　高级I/O
+
+### 14.2 非阻塞I/O
+
+- 低速系统调用是可能会使进程永远阻塞的一类系统调用
+
+- 非阻塞I/O可以发出open read write这样的I/O操作，并使这些操作不会永远阻塞，如果这样的操作不能完成，则调用立即出错返回
+
+- 两种指定为非阻塞I/O的方法
+
+  - 调用open获得描述符，可指定O_NONBLOCK标志
+  - 对一个打开的描述符，调用fcnt1,由该函数打开O_NONBLOCK文件状态标志
+
+- ```c++
+  #include "apue.h"
+  #include <errno.h>
+  #include <fcntl.h>
+  
+  char	buf[500000];
+  
+  int
+  main(void)
+  {
+  	int		ntowrite, nwrite;
+  	char	*ptr;
+  
+  	ntowrite = read(STDIN_FILENO, buf, sizeof(buf));
+  	fprintf(stderr, "read %d bytes\n", ntowrite);
+  
+  	set_fl(STDOUT_FILENO, O_NONBLOCK);	/* set nonblocking */
+  
+  	ptr = buf;
+  	while (ntowrite > 0) {
+  		errno = 0;
+  		nwrite = write(STDOUT_FILENO, ptr, ntowrite);
+  		fprintf(stderr, "nwrite = %d, errno = %d\n", nwrite, errno);
+  
+  		if (nwrite > 0) {
+  			ptr += nwrite;
+  			ntowrite -= nwrite;
+  		}
+  	}
+  
+  	clr_fl(STDOUT_FILENO, O_NONBLOCK);	/* clear nonblocking */
+  
+  	exit(0);
+  }
+  ```
+
+### 14.3 记录锁
+
+- 记录锁的功能: 当一个进程正在读或修改文件的某个部分时，使用记录锁可以阻止其他进程修改同一文件区
+
+- fcnt1记录锁
+
+  - fcnt1
+  - 对于记录锁，cmd是F_GETLK  F_SETLK  F_SETLKW
+  - 第三个参数是一个指向flock结构的指针
+  - 任意多个进程在一个给定的字节上可以有一把共享的读锁，但是在一个给定的字节上只能有一个进程有一把独占写锁
+  - 兼容性规则适用于不同进程提出的锁请求，并不适用于单个进程提出的多个锁请求
+
+- 死锁实例
+
+  ```c++
+  #include "apue.h"
+  #include <fcntl.h>
+  
+  static void
+  lockabyte(const char *name, int fd, off_t offset)
+  {
+  	if (writew_lock(fd, offset, SEEK_SET, 1) < 0)
+  		err_sys("%s: writew_lock error", name);
+  	printf("%s: got the lock, byte %lld\n", name, (long long)offset);
+  }
+  
+  int
+  main(void)
+  {
+  	int		fd;
+  	pid_t	pid;
+  
+  	/*
+  	 * Create a file and write two bytes to it.
+  	 */
+  	if ((fd = creat("templock", FILE_MODE)) < 0)
+  		err_sys("creat error");
+  	if (write(fd, "ab", 2) != 2)
+  		err_sys("write error");
+  
+  	TELL_WAIT();
+  	if ((pid = fork()) < 0) {
+  		err_sys("fork error");
+  	} else if (pid == 0) {			/* child */
+  		lockabyte("child", fd, 0);
+  		TELL_PARENT(getppid());
+  		WAIT_PARENT();
+  		lockabyte("child", fd, 1);
+  	} else {						/* parent */
+  		lockabyte("parent", fd, 1);
+  		TELL_CHILD(pid);
+  		WAIT_CHILD();
+  		lockabyte("parent", fd, 0);
+  	}
+  	exit(0);
+  }
+  ```
+
+  - 检测到死锁时，内核必须选择一个进程接收出错返回
+
+- 锁的隐含继承和释放
+
+  - 当一个进程终止时，它所建立的锁全部释放，无论一个描述符何时关闭，该进程通过这一描述符引用的文件上的任何一把锁都会释放
+  - 由fork产生的子进程不继承父进程所设置的锁
+  - 在执行exec后，新程序可以继承原执行程序的锁
+
+- FressBSD实现
+
+  - 每个lockf结构描述了一个给定进程的一个加锁区域
+
+  - 守护进程可用一把文件锁来保证只有该守护进程的唯一副本在运行，在文件整体上加一把写锁
+
+  - ```c++
+    #include <unistd.h>
+    #include <fcntl.h>
+    
+    int
+    lockfile(int fd)
+    {
+    	struct flock fl;
+    
+    	fl.l_type = F_WRLCK;
+    	fl.l_start = 0;
+    	fl.l_whence = SEEK_SET;
+    	fl.l_len = 0;
+    	return(fcntl(fd, F_SETLK, &fl));
+    }
+    ```
+
+- 在文件尾端加锁
+
+  - 当前偏移量和文件尾端可能会不断变化，而这种变化又不应影响现有锁的状态，所以内核必须独立于当前文件偏移量或文件尾端而记住锁
+
+- 建议性锁和强制性锁
+
+  - 对一个特定文件打开其设置组ID位、关闭其组执行位便开启了对该文件的强制性锁机制
+
+  - 合作进程　
+
+  - 非合作进程
+
+  - 建议性锁不能阻止对数据库文件有写权限的任何其他进程写这个数据库文件
+
+  - 强制性锁会让内核检查每一个open read  write 验证调用进程是否违背了正在访问的文件上的某一把锁
+
+  - 如果欲打开的文件具有强制性纪录锁，而且open调用中的标志指定为O_TRUNC或O_CREAT，则不论是否指定O_NONBLOCK, open都立即出错，errno被设置为EAGAIN
+
+  - 强制性锁对unlink函数没有影响
+
+  - Linux中的　strace命令提供一个进程的系统调用跟踪信息
+
+  - ```c++
+    #include "apue.h"
+    #include <errno.h>
+    #include <fcntl.h>
+    #include <sys/wait.h>
+    
+    int
+    main(int argc, char *argv[])
+    {
+    	int				fd;
+    	pid_t			pid;
+    	char			buf[5];
+    	struct stat		statbuf;
+    
+    	if (argc != 2) {
+    		fprintf(stderr, "usage: %s filename\n", argv[0]);
+    		exit(1);
+    	}
+    	if ((fd = open(argv[1], O_RDWR | O_CREAT | O_TRUNC, FILE_MODE)) < 0)
+    		err_sys("open error");
+    	if (write(fd, "abcdef", 6) != 6)
+    		err_sys("write error");
+    
+    	/* turn on set-group-ID and turn off group-execute */
+    	if (fstat(fd, &statbuf) < 0)
+    		err_sys("fstat error");
+    	if (fchmod(fd, (statbuf.st_mode & ~S_IXGRP) | S_ISGID) < 0)
+    		err_sys("fchmod error");
+    
+    	TELL_WAIT();
+    
+    	if ((pid = fork()) < 0) {
+    		err_sys("fork error");
+    	} else if (pid > 0) {	/* parent */
+    		/* write lock entire file */
+    		if (write_lock(fd, 0, SEEK_SET, 0) < 0)
+    			err_sys("write_lock error");
+    
+    		TELL_CHILD(pid);
+    
+    		if (waitpid(pid, NULL, 0) < 0)
+    			err_sys("waitpid error");
+    	} else {				/* child */
+    		WAIT_PARENT();		/* wait for parent to set lock */
+    
+    		set_fl(fd, O_NONBLOCK);
+    
+    		/* first let's see what error we get if region is locked */
+    		if (read_lock(fd, 0, SEEK_SET, 0) != -1)	/* no wait */
+    			err_sys("child: read_lock succeeded");
+    		printf("read_lock of already-locked region returns %d\n",
+    		  errno);
+    
+    		/* now try to read the mandatory locked file */
+    		if (lseek(fd, 0, SEEK_SET) == -1)
+    			err_sys("lseek error");
+    		if (read(fd, buf, 2) < 0)
+    			err_ret("read failed (mandatory locking works)");
+    		else
+    			printf("read OK (no mandatory locking), buf = %2.2s\n",
+    			  buf);
+    	}
+    	exit(0);
+    }
+    ```
+
+### 14.4 I/O多路转换
+
+- 父进程、子进程
+
+- 多线程
+
+- 轮询方式
+
+- 异步I/O
+
+- poll  pselect  select这三个函数能够执行I/O多路转接
+
+- 函数select和pselect
+
+  - FD_ISSET
+  - FD_CLR
+  - FD_SET
+  - FD_ZERO
+  - 异常条件包括: 在网络连接上到达带外的数据，或者处于数据包模式的伪终端上发生了某些条件
+  - 如果在一个描述符上碰到了文件尾端，则select会认为该描述符是可读的，然后调用read,它返回0
+  - pselect使用timespec结构
+  - pselect可使用信号屏蔽字，sigmask指向一信号屏蔽字，在调用pselect时，以原子操作的方式安装该信号屏蔽字，在返回时，恢复以前的信号屏蔽字
+  - pselect的超时值被声明为const
+
+- 函数poll
+
+  - poll构造一个pollfd结构的数组，每个数组元素指定一个描述符编号以及我们对该描述符感兴趣的条件
+
+  - ```c++
+    struct pollfd{
+        int fd;
+        short events;
+        short events;
+    };
+    ```
+
+  - 文件尾端与挂断之间的区别
+
+  - select和poll的可中断性
+
+### 14.5 异步I/O
+
+- System V异步I/O
+
+  - System V的异步信号是SIGPOLL
+  - 调用ioct1,启动异步I/O
+  - 建立信号处理程序
+
+- BSD异步I/O
+
+  - 异步I/O是信号SIGIO和SIGURG的组合
+  - SIGIO是通用异步I/O
+  - SIGURG是通知进程网络连接上的带外数据已经到达
+
+- POSIX异步I/O
+
+  - 这些异步I/O接口使用AIO控制块来描述I/O操作
+
+  - aiocb结构定义了AIO控制块
+
+  - 在进行异步I/O之前需要先初始化AIO控制块
+
+  - aio_read函数进行异步读操作，aio_write函数进行异步写操作
+
+  - aio_fsync
+
+  - aio_error 获知一个异步读、写或者同步操作的完成状态
+
+  - aio_return异步操作成功，获取异步操作的返回值
+
+  - aio_suspend函数阻塞进程，直到操作完成
+
+  - aio_cancel
+
+  - lio_listio
+
+  - POSIX异步I/O接口现在是Single UNIX Specification的基本部分
+
+  - ```c++
+    #include "apue.h"
+    #include <ctype.h>
+    #include <fcntl.h>
+    #include <aio.h>
+    #include <errno.h>
+    
+    #define BSZ 4096
+    #define NBUF 8
+    
+    enum rwop {
+    	UNUSED = 0,
+    	READ_PENDING = 1,
+    	WRITE_PENDING = 2
+    };
+    
+    struct buf {
+    	enum rwop     op;
+    	int           last;
+    	struct aiocb  aiocb;
+    	unsigned char data[BSZ];
+    };
+    
+    struct buf bufs[NBUF];
+    
+    unsigned char
+    translate(unsigned char c)
+    {
+    	/* same as before */
+    }
+    
+    int
+    main(int argc, char* argv[])
+    {
+    	int					ifd, ofd, i, j, n, err, numop;
+    	struct stat			sbuf;
+    	const struct aiocb	*aiolist[NBUF];
+    	off_t				off = 0;
+    
+    	if (argc != 3)
+    		err_quit("usage: rot13 infile outfile");
+    	if ((ifd = open(argv[1], O_RDONLY)) < 0)
+    		err_sys("can't open %s", argv[1]);
+    	if ((ofd = open(argv[2], O_RDWR|O_CREAT|O_TRUNC, FILE_MODE)) < 0)
+    		err_sys("can't create %s", argv[2]);
+    	if (fstat(ifd, &sbuf) < 0)
+    		err_sys("fstat failed");
+    
+    	/* initialize the buffers */
+    	for (i = 0; i < NBUF; i++) {
+    		bufs[i].op = UNUSED;
+    		bufs[i].aiocb.aio_buf = bufs[i].data;
+    		bufs[i].aiocb.aio_sigevent.sigev_notify = SIGEV_NONE;
+    		aiolist[i] = NULL;
+    	}
+    
+    	numop = 0;
+    	for (;;) {
+    		for (i = 0; i < NBUF; i++) {
+    			switch (bufs[i].op) {
+    			case UNUSED:
+    				/*
+    				 * Read from the input file if more data
+    				 * remains unread.
+    				 */
+    				if (off < sbuf.st_size) {
+    					bufs[i].op = READ_PENDING;
+    					bufs[i].aiocb.aio_fildes = ifd;
+    					bufs[i].aiocb.aio_offset = off;
+    					off += BSZ;
+    					if (off >= sbuf.st_size)
+    						bufs[i].last = 1;
+    					bufs[i].aiocb.aio_nbytes = BSZ;
+    					if (aio_read(&bufs[i].aiocb) < 0)
+    						err_sys("aio_read failed");
+    					aiolist[i] = &bufs[i].aiocb;
+    					numop++;
+    				}
+    				break;
+    
+    			case READ_PENDING:
+    				if ((err = aio_error(&bufs[i].aiocb)) == EINPROGRESS)
+    					continue;
+    				if (err != 0) {
+    					if (err == -1)
+    						err_sys("aio_error failed");
+    					else
+    						err_exit(err, "read failed");
+    				}
+    
+    				/*
+    				 * A read is complete; translate the buffer
+    				 * and write it.
+    				 */
+    				if ((n = aio_return(&bufs[i].aiocb)) < 0)
+    					err_sys("aio_return failed");
+    				if (n != BSZ && !bufs[i].last)
+    					err_quit("short read (%d/%d)", n, BSZ);
+    				for (j = 0; j < n; j++)
+    					bufs[i].data[j] = translate(bufs[i].data[j]);
+    				bufs[i].op = WRITE_PENDING;
+    				bufs[i].aiocb.aio_fildes = ofd;
+    				bufs[i].aiocb.aio_nbytes = n;
+    				if (aio_write(&bufs[i].aiocb) < 0)
+    					err_sys("aio_write failed");
+    				/* retain our spot in aiolist */
+    				break;
+    
+    			case WRITE_PENDING:
+    				if ((err = aio_error(&bufs[i].aiocb)) == EINPROGRESS)
+    					continue;
+    				if (err != 0) {
+    					if (err == -1)
+    						err_sys("aio_error failed");
+    					else
+    						err_exit(err, "write failed");
+    				}
+    
+    				/*
+    				 * A write is complete; mark the buffer as unused.
+    				 */
+    				if ((n = aio_return(&bufs[i].aiocb)) < 0)
+    					err_sys("aio_return failed");
+    				if (n != bufs[i].aiocb.aio_nbytes)
+    					err_quit("short write (%d/%d)", n, BSZ);
+    				aiolist[i] = NULL;
+    				bufs[i].op = UNUSED;
+    				numop--;
+    				break;
+    			}
+    		}
+    		if (numop == 0) {
+    			if (off >= sbuf.st_size)
+    				break;
+    		} else {
+    			if (aio_suspend(aiolist, NBUF, NULL) < 0)
+    				err_sys("aio_suspend failed");
+    		}
+    	}
+    
+    	bufs[0].aiocb.aio_fildes = ofd;
+    	if (aio_fsync(O_SYNC, &bufs[0].aiocb) < 0)
+    		err_sys("aio_fsync failed");
+    	exit(0);
+    }
+    ```
+
+### 14.6 函数readv和writev
+
+- 用于在一次函数调用中读写多个非连续缓冲区
+
+- ```c++
+  struct iovec{
+      void*iov_base;
+      size_t iov_len;
+  };
+  ```
+
+### 14.7 函数readn和writen
+
+- 管道、FIFO以及某些设备(如终端和网络)有以下两种性质
+
+  - 一次read操作所返回的数据可能少于所要求的数据
+  - 一次write操作的返回值也可能少于指定输出的字节数
+
+- readn  writen并不是哪个标准的组成部分
+
+- ```c++
+  #include "apue.h"
+  
+  ssize_t             /* Read "n" bytes from a descriptor  */
+  readn(int fd, void *ptr, size_t n)
+  {
+  	size_t		nleft;
+  	ssize_t		nread;
+  
+  	nleft = n;
+  	while (nleft > 0) {
+  		if ((nread = read(fd, ptr, nleft)) < 0) {
+  			if (nleft == n)
+  				return(-1); /* error, return -1 */
+  			else
+  				break;      /* error, return amount read so far */
+  		} else if (nread == 0) {
+  			break;          /* EOF */
+  		}
+  		nleft -= nread;
+  		ptr   += nread;
+  	}
+  	return(n - nleft);      /* return >= 0 */
+  }
+  ```
+
+- ```c++
+  #include "apue.h"
+  
+  ssize_t             /* Write "n" bytes to a descriptor  */
+  writen(int fd, const void *ptr, size_t n)
+  {
+  	size_t		nleft;
+  	ssize_t		nwritten;
+  
+  	nleft = n;
+  	while (nleft > 0) {
+  		if ((nwritten = write(fd, ptr, nleft)) < 0) {
+  			if (nleft == n)
+  				return(-1); /* error, return -1 */
+  			else
+  				break;      /* error, return amount written so far */
+  		} else if (nwritten == 0) {
+  			break;
+  		}
+  		nleft -= nwritten;
+  		ptr   += nwritten;
+  	}
+  	return(n - nleft);      /* return >= 0 */
+  }
+  ```
+
+### 14.8 存储映射I/O
+
+- 能将一个磁盘文件映射到存储空间中的一个缓冲区上，当从缓冲区中取数据时，就相当于读文件中的相应字节，将数据写入缓冲区时，相应字节就自动写入文件。即可在不使用read和write的情况下执行I/O
+
+- mmap函数　告诉内核将一个给定的文件映射到一个存储区域中
+
+- 不能用mmap将数据添加到文件中，必须先加长该文件
+
+- SIGSEGV  将数据存入只读映射区时
+
+- SIGBUS　访问不存在的映射区的某个部分时
+
+- 子进程能通过fork继承存储映射区(因为存储映射区是地址空间中的一部分)
+
+- mprotect可以更改一个现有映射的权限
+
+- 如果共享映射中的页已修改，那么可以调用msync将该页冲洗到被映射的文件中
+
+- 当进程终止时，会自动解除存储映射区的映射，或者直接调用munmap函数也可以解除映射区
+
+- 数据被写到文件的确切时间依赖于系统的页管理算法，如果想确保数据安全地写到文件中，则需要在进程终止前以MS_SYNC标志调用msync
+
+- ```c++
+  #include "apue.h"
+  #include <fcntl.h>
+  #include <sys/mman.h>
+  
+  #define COPYINCR (1024*1024*1024)	/* 1 GB */
+  
+  int
+  main(int argc, char *argv[])
+  {
+  	int			fdin, fdout;
+  	void		*src, *dst;
+  	size_t		copysz;
+  	struct stat	sbuf;
+  	off_t		fsz = 0;
+  
+  	if (argc != 3)
+  		err_quit("usage: %s <fromfile> <tofile>", argv[0]);
+  
+  	if ((fdin = open(argv[1], O_RDONLY)) < 0)
+  		err_sys("can't open %s for reading", argv[1]);
+  
+  	if ((fdout = open(argv[2], O_RDWR | O_CREAT | O_TRUNC,
+  	  FILE_MODE)) < 0)
+  		err_sys("can't creat %s for writing", argv[2]);
+  
+  	if (fstat(fdin, &sbuf) < 0)			/* need size of input file */
+  		err_sys("fstat error");
+  
+  	if (ftruncate(fdout, sbuf.st_size) < 0)	/* set output file size */
+  		err_sys("ftruncate error");
+  
+  	while (fsz < sbuf.st_size) {
+  		if ((sbuf.st_size - fsz) > COPYINCR)
+  			copysz = COPYINCR;
+  		else
+  			copysz = sbuf.st_size - fsz;
+  
+  		if ((src = mmap(0, copysz, PROT_READ, MAP_SHARED,
+  		  fdin, fsz)) == MAP_FAILED)
+  			err_sys("mmap error for input");
+  		if ((dst = mmap(0, copysz, PROT_READ | PROT_WRITE,
+  		  MAP_SHARED, fdout, fsz)) == MAP_FAILED)
+  			err_sys("mmap error for output");
+  
+  		memcpy(dst, src, copysz);	/* does the file copy */
+  		munmap(src, copysz);
+  		munmap(dst, copysz);
+  		fsz += copysz;
+  	}
+  	exit(0);
+  }
+  ```
+
+
+
+## 第15章　进程间通信
+
+- 进程间通信IPC
+
+### 15.2 管道
+
+- 局限性
+
+  - 历史上是半双工的，不应预先假设系统支持全双工管道
+  - 管道只能在具有公共祖先的两个进程之间使用
+
+- 半双工管道是最常用的IPC形式
+
+- 每当在管道中键入一个命令序列，让shell执行时，shell都会为每一条命令单独创建一个进程，然后使用管道将前一条命令进程的标准输出与后一条命令的标准输入相连接
+
+- pipe函数创建
+
+- 通常，进程会先调用pipe,接着调用fork, 从而创建从父进程到子进程的IPC通道
+
+- 当管道的一端被关闭后，下列两条规则
+
+  - 当读一个写端已被关闭的管道时，在所有数据都被读取后，read返回0,表示文件结束
+  - 如果写一个读端已被关闭的管道，则产生信号SIGPIPE
+  - 常量PIPE_BUF规定了内核的管道缓冲区大小
+
+- ```c++
+  #include "apue.h"
+  
+  int
+  main(void)
+  {
+  	int		n;
+  	int		fd[2];
+  	pid_t	pid;
+  	char	line[MAXLINE];
+  
+  	if (pipe(fd) < 0)
+  		err_sys("pipe error");
+  	if ((pid = fork()) < 0) {
+  		err_sys("fork error");
+  	} else if (pid > 0) {		/* parent */
+  		close(fd[0]);
+  		write(fd[1], "hello world\n", 12);
+  	} else {					/* child */
+  		close(fd[1]);
+  		n = read(fd[0], line, MAXLINE);
+  		write(STDOUT_FILENO, line, n);
+  	}
+  	exit(0);
+  }
+  ```
+
+- 通过管道将输出直接送到分页程序
+
+  - ```c++
+    #include "apue.h"
+    #include <sys/wait.h>
+    
+    #define	DEF_PAGER	"/bin/more"		/* default pager program */
+    
+    int
+    main(int argc, char *argv[])
+    {
+    	int		n;
+    	int		fd[2];
+    	pid_t	pid;
+    	char	*pager, *argv0;
+    	char	line[MAXLINE];
+    	FILE	*fp;
+    
+    	if (argc != 2)
+    		err_quit("usage: a.out <pathname>");
+    
+    	if ((fp = fopen(argv[1], "r")) == NULL)
+    		err_sys("can't open %s", argv[1]);
+    	if (pipe(fd) < 0)
+    		err_sys("pipe error");
+    
+    	if ((pid = fork()) < 0) {
+    		err_sys("fork error");
+    	} else if (pid > 0) {								/* parent */
+    		close(fd[0]);		/* close read end */
+    
+    		/* parent copies argv[1] to pipe */
+    		while (fgets(line, MAXLINE, fp) != NULL) {
+    			n = strlen(line);
+    			if (write(fd[1], line, n) != n)
+    				err_sys("write error to pipe");
+    		}
+    		if (ferror(fp))
+    			err_sys("fgets error");
+    
+    		close(fd[1]);	/* close write end of pipe for reader */
+    
+    		if (waitpid(pid, NULL, 0) < 0)
+    			err_sys("waitpid error");
+    		exit(0);
+    	} else {										/* child */
+    		close(fd[1]);	/* close write end */
+    		if (fd[0] != STDIN_FILENO) {
+    			if (dup2(fd[0], STDIN_FILENO) != STDIN_FILENO)
+    				err_sys("dup2 error to stdin");
+    			close(fd[0]);	/* don't need this after dup2 */
+    		}
+    
+    		/* get arguments for execl() */
+    		if ((pager = getenv("PAGER")) == NULL)
+    			pager = DEF_PAGER;
+    		if ((argv0 = strrchr(pager, '/')) != NULL)
+    			argv0++;		/* step past rightmost slash */
+    		else
+    			argv0 = pager;	/* no slash in pager */
+    
+    		if (execl(pager, argv0, (char *)0) < 0)
+    			err_sys("execl error for %s", pager);
+    	}
+    	exit(0);
+    }
+    ```
+
+- 图10-24提供了TELL_WAIT  TELL_PARENT TELL_CHILD WAIT_PARENT和WAIT_CHILD的使用信号的实现
+
+- 图15-7提供了TELL_WAIT  TELL_PARENT TELL_CHILD WAIT_PARENT和WAIT_CHILD的使用管道的实现
+
+- 用两个管道实现子进程和父进程同步
+
+- ```c++
+  #include "apue.h"
+  
+  static int	pfd1[2], pfd2[2];
+  
+  void
+  TELL_WAIT(void)
+  {
+  	if (pipe(pfd1) < 0 || pipe(pfd2) < 0)
+  		err_sys("pipe error");
+  }
+  
+  void
+  TELL_PARENT(pid_t pid)
+  {
+  	if (write(pfd2[1], "c", 1) != 1)
+  		err_sys("write error");
+  }
+  
+  void
+  WAIT_PARENT(void)
+  {
+  	char	c;
+  
+  	if (read(pfd1[0], &c, 1) != 1)
+  		err_sys("read error");
+  
+  	if (c != 'p')
+  		err_quit("WAIT_PARENT: incorrect data");
+  }
+  
+  void
+  TELL_CHILD(pid_t pid)
+  {
+  	if (write(pfd1[1], "p", 1) != 1)
+  		err_sys("write error");
+  }
+  
+  void
+  WAIT_CHILD(void)
+  {
+  	char	c;
+  
+  	if (read(pfd2[0], &c, 1) != 1)
+  		err_sys("read error");
+  
+  	if (c != 'c')
+  		err_quit("WAIT_CHILD: incorrect data");
+  }
+  ```
+
+### 15.3 函数popen和pclose
+
+- 创建一个管道，fork一个子进程，关闭未使用的管道端，执行一个shell运行命令，然后等待命令终止
+
+- 函数popen先执行fork,然后调用esec执行cmdstring,并且返回一个标准I/O文件指针
+
+- pclose关闭标准I/O流，等待命令终止，然后返回shell的终止状态  
+
+- 用popen向分页程序传送文件
+
+- ```c++
+  #include "apue.h"
+  #include <sys/wait.h>
+  
+  #define	PAGER	"${PAGER:-more}" /* environment variable, or default */
+  
+  int
+  main(int argc, char *argv[])
+  {
+  	char	line[MAXLINE];
+  	FILE	*fpin, *fpout;
+  
+  	if (argc != 2)
+  		err_quit("usage: a.out <pathname>");
+  	if ((fpin = fopen(argv[1], "r")) == NULL)
+  		err_sys("can't open %s", argv[1]);
+  
+  	if ((fpout = popen(PAGER, "w")) == NULL)
+  		err_sys("popen error");
+  
+  	/* copy argv[1] to pager */
+  	while (fgets(line, MAXLINE, fpin) != NULL) {
+  		if (fputs(line, fpout) == EOF)
+  			err_sys("fputs error to pipe");
+  	}
+  	if (ferror(fpin))
+  		err_sys("fgets error");
+  	if (pclose(fpout) == -1)
+  		err_sys("pclose error");
+  
+  	exit(0);
+  }
+  ```
+
+- ${PAGER:-more} pipe2.c 
+
+- ${PAGER:-more}的意思是: 如果shell变量PAGER已经定义，且其值非空，则使用其值，否则使用字符串more
+
+- ```c++
+  #include "apue.h"
+  #include <errno.h>
+  #include <fcntl.h>
+  #include <sys/wait.h>
+  
+  /*
+   * Pointer to array allocated at run-time.
+   */
+  static pid_t	*childpid = NULL;
+  
+  /*
+   * From our open_max(), {Prog openmax}.
+   */
+  static int		maxfd;
+  
+  FILE *
+  popen(const char *cmdstring, const char *type)
+  {
+  	int		i;
+  	int		pfd[2];
+  	pid_t	pid;
+  	FILE	*fp;
+  
+  	/* only allow "r" or "w" */
+  	if ((type[0] != 'r' && type[0] != 'w') || type[1] != 0) {
+  		errno = EINVAL;
+  		return(NULL);
+  	}
+  
+  	if (childpid == NULL) {		/* first time through */
+  		/* allocate zeroed out array for child pids */
+  		maxfd = open_max();
+  		if ((childpid = calloc(maxfd, sizeof(pid_t))) == NULL)
+  			return(NULL);
+  	}
+  
+  	if (pipe(pfd) < 0)
+  		return(NULL);	/* errno set by pipe() */
+  	if (pfd[0] >= maxfd || pfd[1] >= maxfd) {
+  		close(pfd[0]);
+  		close(pfd[1]);
+  		errno = EMFILE;
+  		return(NULL);
+  	}
+  
+  	if ((pid = fork()) < 0) {
+  		return(NULL);	/* errno set by fork() */
+  	} else if (pid == 0) {							/* child */
+  		if (*type == 'r') {
+  			close(pfd[0]);
+  			if (pfd[1] != STDOUT_FILENO) {
+  				dup2(pfd[1], STDOUT_FILENO);
+  				close(pfd[1]);
+  			}
+  		} else {
+  			close(pfd[1]);
+  			if (pfd[0] != STDIN_FILENO) {
+  				dup2(pfd[0], STDIN_FILENO);
+  				close(pfd[0]);
+  			}
+  		}
+  
+  		/* close all descriptors in childpid[] */
+  		for (i = 0; i < maxfd; i++)
+  			if (childpid[i] > 0)
+  				close(i);
+  
+  		execl("/bin/sh", "sh", "-c", cmdstring, (char *)0);
+  		_exit(127);
+  	}
+  
+  	/* parent continues... */
+  	if (*type == 'r') {
+  		close(pfd[1]);
+  		if ((fp = fdopen(pfd[0], type)) == NULL)
+  			return(NULL);
+  	} else {
+  		close(pfd[0]);
+  		if ((fp = fdopen(pfd[1], type)) == NULL)
+  			return(NULL);
+  	}
+  
+  	childpid[fileno(fp)] = pid;	/* remember child pid for this fd */
+  	return(fp);
+  }
+  
+  int
+  pclose(FILE *fp)
+  {
+  	int		fd, stat;
+  	pid_t	pid;
+  
+  	if (childpid == NULL) {
+  		errno = EINVAL;
+  		return(-1);		/* popen() has never been called */
+  	}
+  
+  	fd = fileno(fp);
+  	if (fd >= maxfd) {
+  		errno = EINVAL;
+  		return(-1);		/* invalid file descriptor */
+  	}
+  	if ((pid = childpid[fd]) == 0) {
+  		errno = EINVAL;
+  		return(-1);		/* fp wasn't opened by popen() */
+  	}
+  
+  	childpid[fd] = 0;
+  	if (fclose(fp) == EOF)
+  		return(-1);
+  
+  	while (waitpid(pid, &stat, 0) < 0)
+  		if (errno != EINTR)
+  			return(-1);	/* error other than EINTR from waitpid() */
+  
+  	return(stat);	/* return child's termination status */
+  }
+  ```
+
+- ```c++
+  #include "apue.h"
+  #include <sys/wait.h>
+  
+  int
+  main(void)
+  {
+  	char	line[MAXLINE];
+  	FILE	*fpin;
+  
+  	if ((fpin = popen("myuclc", "r")) == NULL)
+  		err_sys("popen error");
+  	for ( ; ; ) {
+  		fputs("prompt> ", stdout);
+  		fflush(stdout);
+  		if (fgets(line, MAXLINE, fpin) == NULL)	/* read from pipe */
+  			break;
+  		if (fputs(line, stdout) == EOF)
+  			err_sys("fputs error to pipe");
+  	}
+  	if (pclose(fpin) == -1)
+  		err_sys("pclose error");
+  	putchar('\n');
+  	exit(0);
+  }
+  ```
+
+- 因为标准输出是行缓冲的，而提示并不包含换行符，所以在写了提示之后，需要调用fflush
+
+### 15.4 协同进程
+
+- Unix系统过滤程序从标准输入读取数据，向标准输出写数据
+
+- 当一个过滤程序既产生某个过滤程序的输入，又读取该过滤程序的输出时，它就变成了协同进程
+
+- 协同进程通常在shell的后台运行，其标准输入和标准输出通过管道连接到另一个程序
+
+- ```c++
+  #include "apue.h"
+  
+  static void	sig_pipe(int);		/* our signal handler */
+  
+  int
+  main(void)
+  {
+  	int		n, fd1[2], fd2[2];
+  	pid_t	pid;
+  	char	line[MAXLINE];
+  
+  	if (signal(SIGPIPE, sig_pipe) == SIG_ERR)
+  		err_sys("signal error");
+  
+  	if (pipe(fd1) < 0 || pipe(fd2) < 0)
+  		err_sys("pipe error");
+  
+  	if ((pid = fork()) < 0) {
+  		err_sys("fork error");
+  	} else if (pid > 0) {							/* parent */
+  		close(fd1[0]);
+  		close(fd2[1]);
+  
+  		while (fgets(line, MAXLINE, stdin) != NULL) {
+  			n = strlen(line);
+  			if (write(fd1[1], line, n) != n)
+  				err_sys("write error to pipe");
+  			if ((n = read(fd2[0], line, MAXLINE)) < 0)
+  				err_sys("read error from pipe");
+  			if (n == 0) {
+  				err_msg("child closed pipe");
+  				break;
+  			}
+  			line[n] = 0;	/* null terminate */
+  			if (fputs(line, stdout) == EOF)
+  				err_sys("fputs error");
+  		}
+  
+  		if (ferror(stdin))
+  			err_sys("fgets error on stdin");
+  		exit(0);
+  	} else {									/* child */
+  		close(fd1[1]);
+  		close(fd2[0]);
+  		if (fd1[0] != STDIN_FILENO) {
+  			if (dup2(fd1[0], STDIN_FILENO) != STDIN_FILENO)
+  				err_sys("dup2 error to stdin");
+  			close(fd1[0]);
+  		}
+  
+  		if (fd2[1] != STDOUT_FILENO) {
+  			if (dup2(fd2[1], STDOUT_FILENO) != STDOUT_FILENO)
+  				err_sys("dup2 error to stdout");
+  			close(fd2[1]);
+  		}
+  		if (execl("./add2", "add2", (char *)0) < 0)
+  			err_sys("execl error");
+  	}
+  	exit(0);
+  }
+  
+  static void
+  sig_pipe(int signo)
+  {
+  	printf("SIGPIPE caught\n");
+  	exit(1);
+  }
+  ```
+
+- 标准I/O的默认缓冲机制问题
+
+- 对标准输入的第一个fgets引起标准I/O库分配一个缓冲区，并选择缓冲的类型，因为标准输入是一个管道，所以标准I/O库默认是全缓冲的，标准输出也是。当add2从其标准输入读取而发生阻塞时，从管道读时也发生阻塞，于是产生了死锁
+
+- setvbuf  解决fget　　pritnf的问题
+
+### 15.5 FIFO
+
+- 命名管道，通过FIFO,不相关的进程也能交换数据
+
+- 创建FIFO类似于创建文件，FIFO是一种文件类型，FIFO的路径名存在于文件系统中
+
+- mkfifo
+
+- mkfifoat
+
+- 可以用一条shell命令mkfifo创建一个FIFO,然后用一般的shell I/O重定向对其进行访问
+
+- 用open打开FIFO
+
+- 一个给定的FIFO有多个写进程是常见的
+
+- FIFO用途
+
+  - shell命令使用FIFO将数据从一条管道传送到另一条管道时，无需创建中间临时文件
+  - 客户进程-服务器进程应用程序中，FIFO用作汇聚点
+
+- tee命令程序将其标准输入同时复制到其标准输出以及其命令行中命名的文件中
+
+- ```shell
+  mkfifo fifo1
+  prog3 < fifo1 &
+  prog1 < infile | tee fifo1 | prog2
+  #使用FIFO和tee将一个流发送到两个不同的进程
+  ```
+
+### 15.6 XSI IPC
+
+- 三种: 消息队列　信号量　共享存储器
+- 标识符和键
+  - 标识符是IPC对象的内部名，键为外部名
+  - ftok由一个路径名和项目ID产生一个键
+- 权限结构
+  - ipc_perm
+- 结构限制
+  - ipcs -l
+- 优点和缺点
+  - XSI IPC的IPC结构是在系统范围内起作用的，没有引用计数
+  - IPC结构在文件系统中没有名字
+  - 不使用文件描述符
+  - 优点: 可靠的、流控制的、面向记录的，可以以用非先进先出次序处理
+
+### 15.7 消息队列
+
+- 消息队列是消息的链接表，存储在内核中，由消息队列标识符标识
+- 每个队列都有一个msqid_ds结构与其相关联
+- msgget，打开一个现有队列或创建一个新队列
+- msgct1函数对队列执行多种操作
+- msgsnd将数据放到消息队列中
+- 消息队列没有维护引用计数器
+- msgrcv从队列中取消息
+- 考虑到使用消息队列时遇到的问题，在新的应用程序中不应当再使用它们
+
+### 15.8 信号量
+
+- 信号量与之前的IPC结构不同，它是一个计数器，用于为多个进程提供对共享数据对象的访问，信号量通常是在内核中实现的
+- 内核为每个信号量维护着一个semid_ds结构
+- semget获得一个信号量ID
+- semctl函数包含了多种信号量操作
+- 函数semop自动执行信号量集合上的操作数组
+- 信号量、记录锁和互斥量的时间比较
+- 在多个进程间共享的内存使用互斥量来恢复一个终止的进程更难
+
+### 15.9 共享存储
+
+- 共享存储允许多个进程共享一个给定的存储区，这是最快的一种IPC
+
+- 在多个进程之间同步访问一个给定的存储区
+
+- **信号量用于同步共享存储访问(可以用记录锁或互斥量)**
+
+- XSI共享存储和内存映射的文件的不同之处在于，它没有相关的文件，XSI共享存储段是内存的匿名段
+
+- 内核为每个共享存储段维护着一个结构
+
+- 函数shmget获得一个共享存储标识符
+
+- shmctl函数对共享存储段执行多种操作
+
+- 一旦创建了一个共享存储段，进程就可调用shmat将其连接到进程的地址空间中
+
+- shmdt使相关的shmid_ds结构中的shm_nattch计数器值减1
+
+- ```c++
+  #include "apue.h"
+  #include <sys/shm.h>
+  
+  #define	ARRAY_SIZE	40000
+  #define	MALLOC_SIZE	100000
+  #define	SHM_SIZE	100000
+  #define	SHM_MODE	0600	/* user read/write */
+  
+  char	array[ARRAY_SIZE];	/* uninitialized data = bss */
+  
+  int
+  main(void)
+  {
+  	int		shmid;
+  	char	*ptr, *shmptr;
+  
+  	printf("array[] from %p to %p\n", (void *)&array[0],
+  	  (void *)&array[ARRAY_SIZE]);
+  	printf("stack around %p\n", (void *)&shmid);
+  
+  	if ((ptr = malloc(MALLOC_SIZE)) == NULL)
+  		err_sys("malloc error");
+  	printf("malloced from %p to %p\n", (void *)ptr,
+  	  (void *)ptr+MALLOC_SIZE);
+  
+  	if ((shmid = shmget(IPC_PRIVATE, SHM_SIZE, SHM_MODE)) < 0)
+  		err_sys("shmget error");
+  	if ((shmptr = shmat(shmid, 0, 0)) == (void *)-1)
+  		err_sys("shmat error");
+  	printf("shared memory attached from %p to %p\n", (void *)shmptr,
+  	  (void *)shmptr+SHM_SIZE);
+  
+  	if (shmctl(shmid, IPC_RMID, 0) < 0)
+  		err_sys("shmctl error");
+  
+  	exit(0);
+  }
+  ```
+
+- 图7-6典型的进程存储空间安排，图15-32进程存储空间布局
+
+- 用mmap映射的存储段是与文件相关联的，而XSI共享存储段则并无这种关联
+
+- 共享存储可由两个不相关的进程使用
+
+- 匿名存储映射: 类似与/dev/zero的设施，在调用mmap时指定MAP_ANON标志，并将文件描述符指定为-1
+
+- 如果在两个无关进程之间要使用共享存储段，有两种替代方法: 一种是应用程序使用XSI共享存储函数，另一种是使用mmap将同一文件映射至它们的地址空间
+
+### 15.10 POSIX信号量
+
+- POSIX信号量接口意在解决XSI信号量接口的几个缺陷
+
+- 命名的: 可以通过名字访问
+
+- 未命名的: 只存在于内存中
+
+- sem_open创建一个新的命名信号量或使用一个现有的信号量
+
+- 可以调用sem_close函数来释放任何信号量相关的资源
+
+- sem_unlink函数销毁一个命名信号量
+
+- sem_wait或sem_trywait函数实现信号量减1操作
+
+- sem_timewait
+
+- sem_post函数使信号量值增1
+
+- 调用sem_init函数创建一个未命名的信号量
+
+- 调用sem_destroy丢弃它
+
+- sem_getvalue函数可以用来检索信号量值
+
+- **二进制信号量可以像互斥量一样使用，可以使用信号量来创建自己的锁原语从而提供互斥**
+
+- ```c++
+  #include <semaphore.h>
+  #include <fcntl.h>
+  #include <limits.h>
+  #include <sys/stat.h>
+  
+  struct slock {
+  	sem_t *semp;
+  	char name[_POSIX_NAME_MAX];
+  };
+  
+  struct slock * s_alloc();
+  void s_free(struct slock *);
+  int s_lock(struct slock *);
+  int s_trylock(struct slock *);
+  int s_unlock(struct slock *);
+  ```
+
+- ```c++
+  #include "slock.h"
+  #include <stdlib.h>
+  #include <stdio.h>
+  #include <unistd.h>
+  #include <errno.h>
+  
+  struct slock *
+  s_alloc()
+  {
+  	struct slock *sp;
+  	static int cnt;
+  
+  	if ((sp = malloc(sizeof(struct slock))) == NULL)
+  		return(NULL);
+  	do {
+  		snprintf(sp->name, sizeof(sp->name), "/%ld.%d", (long)getpid(),
+  		  cnt++);
+  		sp->semp = sem_open(sp->name, O_CREAT|O_EXCL, S_IRWXU, 1);
+  	} while ((sp->semp == SEM_FAILED) && (errno == EEXIST));
+  	if (sp->semp == SEM_FAILED) {
+  		free(sp);
+  		return(NULL);
+  	}
+  	sem_unlink(sp->name);
+  	return(sp);
+  }
+  
+  void
+  s_free(struct slock *sp)
+  {
+  	sem_close(sp->semp);
+  	free(sp);
+  }
+  
+  int
+  s_lock(struct slock *sp)
+  {
+  	return(sem_wait(sp->semp));
+  }
+  
+  int
+  s_trylock(struct slock *sp)
+  {
+  	return(sem_trywait(sp->semp));
+  }
+  
+  int
+  s_unlock(struct slock *sp)
+  {
+  	return(sem_post(sp->semp));
+  }
+  ```
+
+### 15.11 客户进程-服务器进程属性
+
+### 15.12
+
+- 进程间通信的多种形式: 管道　命名管道(FIFO)　XSI IPC的3种形式的IPC(消息队列、信号量和共享存储)
+- 信号量实际上是同步原语而不是IPC,常用于共享资源(如共享存储段)的同步访问
+- 尽量使用管道和FIFO以及全双工管道和记录锁，避免使用消息队列和信号量
+
+## 第16章　网络IPC: 套接字
+
+### 16.2 套接字描述符
+
+- socket
+- shutdown
+
+### 16.3 寻址
+
+- 字节序
+- 地址格式
+- 地址查询
+  - gethostent
+  - sethostent
+  - endhostent
+- 将套接字与地址关联
+
+### 16.4 建立连接
+
+### 16.5 数据传输
+
+- send,使用send时套接字必须已经连接
+- sendto
+- 调用带有msghdr结构的sendmsg来指定多重缓冲区传输数据
+- recv,可以指定标志来控制如何接收数据
+- recvfrom
+- recvmsg用msghdr结构指定接收数据的输入缓冲区
+
+### 16.6 套接字选项
+
+### 16.7 带外数据
+
+- TCP支持带外数据，UDP不支持
+- TCP将带外数据称为紧急数据，仅支持一个字节的紧急数据，但是允许紧急数据在普通数据传递机制数据流之外传输
+
+### 16.8 非阻塞和异步I/O
+
+- 套接字非阻塞模式
+- 基于套接字的异步I/O,当从套接字中读取数据时，或者当套接字写队列中空间变得可用时，可以安排要发送的信号SIGIO
+- 采用fcntl和ioctl完成上述步骤
+
+
+
+
+​     
+
+  
+
+  

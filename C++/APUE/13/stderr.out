@@ -1,0 +1,10 @@
+total 2756
+-rw-r--r-- 1 leiwang leiwang    4631 10月  9 13:55 apue.h
+-rw-r--r-- 1 leiwang leiwang 2788144 11月 27 11:11 apue.h.gch
+-rw-r--r-- 1 leiwang leiwang    2282 3月  20  2014 error.c
+-rw-r--r-- 1 leiwang leiwang    1580 3月  20  2014 init.c
+-rw-r--r-- 1 leiwang leiwang     159 7月  23  2012 Makefile
+-rw-r--r-- 1 leiwang leiwang    1232 3月  20  2014 reread2.c
+-rw-r--r-- 1 leiwang leiwang    1526 3月  20  2014 reread.c
+-rw-r--r-- 1 leiwang leiwang     761 3月  20  2014 single.c
+-rw-r--r-- 1 leiwang leiwang       0 11月 27 12:33 stderr.out

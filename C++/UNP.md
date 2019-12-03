@@ -1093,3 +1093,1040 @@ main(int argc, char **argv)
 - SO_USELOOPBACK
   - 仅用于路由域的套接字
   - 开启时，相应套接字将接收在其上发送的任何数据报的一个副本
+
+### 7.6　IPV4套接字选项
+
+- IP_HDRINCL
+  - 如果本选项是给一个原始IP套接字设置的，我们必须为所有在该原始套接字上发送的数据报构造自己的IP首部
+- IP_OPTIONS
+  - 允许我们在IPV4首部中设置IP选项
+- IP_RECVDSTADDR
+  - 所收到的UDP数据报的目的地址由recvmsg函数作为辅助函数返回
+- IP_RECVIF
+  - 所收到UDP数据报的接收接口索引由recvmsg函数作为辅助数据返回
+- IP_TOS
+  - 允许为TCP UDP或SCTP套接字设置IP首部中的服务类型字段
+- IP_TTL
+  - 使用本选项设置或获取系统用在从某个给定套接字发送的单播分组上的默认TTL值
+
+### 7.7 ICMPv6套接字选项
+
+- ICMP6_FILTER
+  - 获取或设置一个imcp6_filter结构，指出256个可能的ICMPv6消息类型中哪些将经由某个原始套接字传递给所在进程
+
+### 7.8 IPv6套接字选项
+
+- IPV6_CHECKSUM
+  - 用于原始套接字的校验和字段偏移
+  - 内核总是给ICMPv6原始套接字计算并存储校验和
+- IPV6_DONTFRAG
+  - 开启本选项将禁止为UDP套接字或原始套接字自动插入分组首部，外出分组中大小超过发送接口MTU的那些分组将被丢弃
+- IPv6_NEXTHOP
+  - 将外出数据报的下一跳地址指定为一个套接字地址结构
+- IPv6_PATHMTU
+  - 获取本选项时，返回的是由路径MTU发现功能确定的当前MTU
+- IPv6_RECVDSTOPTS
+  - 任何接收到的IPv6目的地选项都将由recvmsg作为辅助函数返回
+- IPV6_RECVHOPLIMIT
+- IPV6_RECVHOPOPTS
+- IPv6_RECVPATHMTU
+- IPv6_RECVPKTINFO
+- IPV6_RECVRTHDR
+- IPv6_RECVTCLASS
+- IPV6_UNICAST_HOPS
+  - 本选项类似于IPv4的IP_TTL套接字选项
+- IPv6_USE_MIN_MTU
+- IPv6_V6ONLY
+  - 在一个AF_INET6套接字上开启本选项将限制它只执行IPv6通信
+- IPv6_XXX
+
+### 7.9 TCP套接字选项
+
+- TCP_MAXSEG
+  - 允许我们获取或设置TCP连接的最大分节大小(MSS)
+- TCP_NODELAY
+  - 开启本选项将禁止TCP的Nagle算法，默认是启动的
+  - Nagle 算法的目的在于防止一个连接在任何时刻有多个小分组(小于MSS的分组)待确认
+  - Nagle算法常与ACK延滞算法(等待一段时间，期待ACK可由发送到对端的数据捎带)联合使用
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-19 15-00-36.png)
+
+### 7.10 SCTP套接字选项
+
+- SCTP_ADAPTION_LAYER
+  - 适配层指示
+  - 允许调用者获取或设置将由本端提供给对端的适配层指示
+- SCTP_ASSOCINFO
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-19 15-20-55.png)
+
+- SCTP_AUTOCLOSE
+  - 获取或设置一个SCTP端点的自动关闭时间
+- SCTP_DEFAULT_SEND_PARAM
+  - 希望发送大量消息且所有消息具有相同发送参数的应用进程可以使用本选项设置默认参数
+  - struct sctp_sndrcvinfo{...}
+- SCTP_DISABLE_FRAGMENTS
+  - 禁止消息分块
+- SCTP_EVENTS
+  - 允许调用者获取、开启或禁止各种SCTP通知
+  - SCTP通知是由SCTP协议栈发送给应用进程的消息
+  - struct sctp_event_subscribe{..}
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-19 15-47-32.png)
+
+- SCTP_GET_PEER_ADDR_INFO
+  - 获取某个给定对端地址的相关信息
+  - struct sctp_paddrinfo{..}
+- SCTP_I_WANT_MAPPED_V4_ADDR
+  - 用于为AF_INET6类型的套接字开启或禁止IPv4映射地址
+- SCTP_INITMSG
+  - 用户获取或设置某个SCTP套接字在发送INIT消息时所用的默认初始参数
+  - struct sctp_initmsg{...}
+- SCTP_MAXBURST
+  - 最大猝发大小
+- SCTP_MAXSEG
+  - 最大片段大小
+- SCTP_NODELAY
+  - 禁止SCTP的Nagle算法
+- SCTP_PEER_ADDR_PARAMS
+  - 获取或设置某个关联的对端地址的各种参数
+  - sctp_paddrparams结构
+- SCTP_PRIMARY_ADDR
+  - 获取或设置本地端点所用的主目的地址
+  - sctp_setprim
+- SCTP_RTOINFO
+  - 获取或设置各种RTO消息
+  - sctp_rtoinfo结构
+- SCTP_SET_PEER_PRIMARY_ADDR
+  - 请求对端把所指定的本地地址作为它的主目的地址
+  - sctp_setpeerprim结构
+- SCTP_STATUS
+  - 用于获取某个关联的状态
+  - sctp_status结构
+
+### 7.11 fcnt1函数
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-19 16-10-36.png)
+
+- 设置某个文件状态标志的唯一正确的方法是: 先取得当前标志，与新标志逻辑或后再设置标志
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-19 16-35-19.png)
+
+## 第八章　基本UDP套接字编程
+
+### 8.1 概述
+
+- 使用UDP编写的一些常见应用程序: DNS  NFS  SNMP
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-26 15-07-10.png)
+
+### 8.2 recvfrom和sendto函数
+
+- 类似于标准的read和write
+- 把读写数据的长度作为函数返回值，recvfrom返回0值是可接受的
+
+### 8.3 UDP回射服务器程序: main函数
+
+### 8.4 UDP回射服务器程序: dg_echo函数
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-26 15-34-37.png)
+
+- 没有对fork的调用，是一个迭代服务器，单个服务器进程就得处理所有客户
+- 大多数TCP服务器是并发的，大多数UDP服务器是迭代的
+- 每个UDP套接字都有一个接收缓冲区，到达该套接字的每个数据报都进入这个套接字接收缓冲区
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-26 15-40-44.png)
+
+### 8.5 UDP回射客户程序: main函数
+
+### 8.6 UDP回射客户程序: dg_cli函数
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-26 15-44-35.png)
+
+- 对于一个UDP套接字，如果其进程首次调用sendto时没有绑定一个本地端口，那么内核在此时为它选择一个临时端口
+
+### 8.7 数据报的丢失
+
+- 设定超时
+- 数据报没有到达服务器，服务器的应答没有回到客户
+
+### 8.8 验证接收到的响应
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-26 15-55-52.png)
+
+- 保留来自数据报所发往服务器的应答，而忽略任何其他数据报
+- 大多数IP实现接受目的地址为本主机任一IP地址的数据报，而不管数据报到达的接口
+- 服务器主机可能是多宿的，会产生很多问题
+
+### 8.9 服务器进程未运行
+
+- 对一个UDP套接字，由它引发的异步错误(sendto发送成功，ICMP不可达错误)却并不返回给它，除非它已连接
+- recvfrom可以返回的信息仅有errno值，它没有办法返回出错数据报的目的IP地址和目的UDP端口号，仅在进程已将其UDP套接字连接到恰恰一个对端时，这些异步错误才返回给进程
+
+### 8.10 UDP程序例子小结
+
+- 客户的临时端口是在第一次调用sendto时一次性选定，不能改变，然而客户的IP地址却可以随客户发送的每个UDP数据报而变动
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-26 16-16-28.png)
+
+### 8.11 UDP的connect函数
+
+- 给UDP套接字调用connect, 没有三路握手过程，内核只是检查是否存在立即可知的错误(如一个显然不可达的目的地)，记录对端的IP地址和端口号，然后立即返回到调用进程
+- 已连接套接字
+  - 不使用sendto,改用write和send
+  - 不必使用recvfrom,而改用read recv或recvmsg.限制一个已连接UDP套接字能且只能与一个对端交换数据报
+  - 由已连接UDP套接字引发的异步错误会返回给它们所在的进程
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-26 16-30-06.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-26 16-31-08.png)
+
+- UDP客户进程或服务器进程只在使用自己的UDP套接字与确定的唯一对端进行通信时，才可调用connect
+- 给一个UDP套接字多次调用connect
+  - 指定新的IP地址和端口号
+  - 断开套接字
+- 性能
+  - 显式连接套接字效率更高
+  - 在一个未连接的UDP套接字上给两个数据报调用sendto函数
+    - 连接套接字
+    - 输出第一个数据报
+    - 断开套接字连接
+    - 连接套接字
+    - 输出第二个数据报
+    - 断开套接字连接
+
+### 8.12 dg_cli函数
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-26 16-46-48.png)
+
+### 8.13 UDP缺乏流量控制
+
+- netstat -s 输出的统计数据将表明丢失了多少数据报
+- 因套接字缓冲区满而丢弃数据报
+- UDP套接字接收缓冲区
+
+### 8.14 UDP中的外出接口的确定
+
+- 已连接套接字还可用来确定用于某个特定目的地的外出接口
+- connect到一个指定的IP地址后调用getsockname得到本地IP地址和端口号并显示输出
+- 在UDP套接字上调用connect并不给对端主机发送任何信息，只是保存对端的IP地址和端口号，同时也给该套接字指定一个临时端口
+
+### 8.15 使用select函数的TCP和UDP回射服务器程序
+
+- 单个使用select来复用TCP和UDP套接字的服务器程序
+
+- TCP端口是独立于UDP端口的
+
+- ```c++
+  /* include udpservselect01 */
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int					listenfd, connfd, udpfd, nready, maxfdp1;
+  	char				mesg[MAXLINE];
+  	pid_t				childpid;
+  	fd_set				rset;
+  	ssize_t				n;
+  	socklen_t			len;
+  	const int			on = 1;
+  	struct sockaddr_in	cliaddr, servaddr;
+  	void				sig_chld(int);
+  
+  		/* 4create listening TCP socket */
+  	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+  
+  	bzero(&servaddr, sizeof(servaddr));
+  	servaddr.sin_family      = AF_INET;
+  	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  	servaddr.sin_port        = htons(SERV_PORT);
+  
+  	Setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+  	Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
+  
+  	Listen(listenfd, LISTENQ);
+  
+  		/* 4create UDP socket */
+  	udpfd = Socket(AF_INET, SOCK_DGRAM, 0);
+  
+  	bzero(&servaddr, sizeof(servaddr));
+  	servaddr.sin_family      = AF_INET;
+  	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  	servaddr.sin_port        = htons(SERV_PORT);
+  
+  	Bind(udpfd, (SA *) &servaddr, sizeof(servaddr));
+  /* end udpservselect01 */
+  
+  /* include udpservselect02 */
+  	Signal(SIGCHLD, sig_chld);	/* must call waitpid() */
+  
+  	FD_ZERO(&rset);
+  	maxfdp1 = max(listenfd, udpfd) + 1;
+  	for ( ; ; ) {
+  		FD_SET(listenfd, &rset);
+  		FD_SET(udpfd, &rset);
+  		if ( (nready = select(maxfdp1, &rset, NULL, NULL, NULL)) < 0) {
+  			if (errno == EINTR)
+  				continue;		/* back to for() */
+  			else
+  				err_sys("select error");
+  		}
+  
+  		if (FD_ISSET(listenfd, &rset)) {
+  			len = sizeof(cliaddr);
+  			connfd = Accept(listenfd, (SA *) &cliaddr, &len);
+  	
+  			if ( (childpid = Fork()) == 0) {	/* child process */
+  				Close(listenfd);	/* close listening socket */
+  				str_echo(connfd);	/* process the request */
+  				exit(0);
+  			}
+  			Close(connfd);			/* parent closes connected socket */
+  		}
+  
+  		if (FD_ISSET(udpfd, &rset)) {
+  			len = sizeof(cliaddr);
+  			n = Recvfrom(udpfd, mesg, MAXLINE, 0, (SA *) &cliaddr, &len);
+  
+  			Sendto(udpfd, mesg, n, 0, (SA *) &cliaddr, len);
+  		}
+  	}
+  }
+  /* end udpservselect02 */
+  ```
+
+
+## 第9章　基本SCTP套接字编程
+
+### 9.2 接口模型
+
+- SCTP套接字分为一到一套接字和一到多套接字
+- 一到一形式
+  - 开发一到一形式的目的是将现有TCP应用程序移植到SCTP上
+  - 任何TCP套接字选项必须转换成等效的SCTP套接字选项
+  - SCTP保存消息边界
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-27 14-42-55.png)
+
+- 一到多形式
+  - 单个套接字描述符将代表多个关联，用于标识单个关联的是一个关联标识，类型为sctp_assoc_t值　
+  - 当一个客户关闭其关联时，其服务器也自动关闭同一个关联
+  - 可用于致使在四路握手的第三个或第四个分组中捎带用户数据的唯一办法是使用一到多形式
+  - 对于一个与它还没有关联存在的IP地址，任何以它为目的地的sendto sendmsg或sctp_sendmsg将导致对主动打开的尝试
+  - 必须使用sendto sendmsg或sctp_sendmsg这三个分组发送函数
+  - 调用分组发送函数时，所用的目的地址是由系统在关联建立阶段选定的主目的地址
+  - 关联事件可能被启用
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-27 15-09-30.png)
+
+### 9.3 sctp_bindx函数
+
+- 捆绑与所在主机系统相关IP地址的一个子集
+- 如果在一个监听套接字上执行sctp_bindx，那么将来产生的关联将使用新的地址配置，已经存在的关联则不受影响
+
+### 9.4 sctp_connectx函数
+
+- 用于连接到一个多宿对端主机
+
+### 9.5 sctp_getpaddrs函数
+
+- 可以知道对端的所有地址
+
+### 9.6 sctp_freepaddrs
+
+- 释放由sctp_getpaddrs函数分配的资源
+
+### 9.7 sctp_getladdrs
+
+- 用于获取属于某个关联的本地地址
+
+### 9.8 sctp_freeladdrs
+
+- 释放sctp_getladdrs函数分配的资源
+
+### 9.9 sctp_sendmsg
+
+- 通过使用伴随辅助数据的sendmsg函数，应用进程能够控制SCTP的各种特性
+- 许多SCTP实现提供了一个辅助函数库调用sctp_sendmsg
+
+### 9.10 sctp_recvmsg
+
+### 9.11 sctp_opt_info函数
+
+- 为无法为SCTP使用getsockopt函数的那些实现提供的
+
+### 9.12 sctp_peeloff
+
+- 从一个一到多式套接字中抽取一个关联，构成一个一到一式套接字，调用结束时将返回一个新的套接字描述符
+
+### 9.13 shutdown函数
+
+- SCTP允许一个端点调用shutdown,之后这个端点可以重用原套接字连接到一个新的对端
+- 当相互通信的两个SCTP端点中任何一个发起关联终止序列时，这两个端点都得把已排队的任何数据发送掉，然后关闭关联
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-27 15-46-18.png)
+
+### 9.14 通知
+
+- SCTP为应用程序提供了多种可用的通知，SCTP用户可用经由这些通知追踪相关关联的状态
+- recvmsg或sctp_recvmsg,如果所返回的数据是一个事件通知，那么这两个函数返回的msg_flags参数将含有MSG_NOTIFICATION标志
+- SCTP_ASSOC_CHANGE
+- SCTP_PEER_ADDR_CHANGE
+- SCTP_REMOTE_ERROR
+- SCTP_SEND_FAILED
+- SCTP_SHUTDOWN_EVENT
+- SCTP_ADAPTION_INDICATION
+- SCTP_PARITAL_DELIVERY_EVENT
+
+
+
+## 第10章　SCTP客户/服务器程序例子
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-27 16-14-22.png)
+
+### 10.2 SCTP一到多式流分回射服务器程序: main函数
+
+```c++
+#include	"unp.h"
+
+int
+main(int argc, char **argv)
+{
+	int sock_fd,msg_flags;
+	char readbuf[BUFFSIZE];
+	struct sockaddr_in servaddr, cliaddr;
+	struct sctp_sndrcvinfo sri;
+	struct sctp_event_subscribe evnts;
+	int stream_increment=1;
+	socklen_t len;
+	size_t rd_sz;
+
+	if (argc == 2)
+		stream_increment = atoi(argv[1]);
+        sock_fd = Socket(AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP);
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port = htons(SERV_PORT);
+
+	Bind(sock_fd, (SA *) &servaddr, sizeof(servaddr));
+	
+	bzero(&evnts, sizeof(evnts));
+	evnts.sctp_data_io_event = 1;
+	Setsockopt(sock_fd, IPPROTO_SCTP, SCTP_EVENTS,
+		   &evnts, sizeof(evnts));
+
+	Listen(sock_fd, LISTENQ);
+	for ( ; ; ) {
+		len = sizeof(struct sockaddr_in);
+		rd_sz = Sctp_recvmsg(sock_fd, readbuf, sizeof(readbuf),
+			     (SA *)&cliaddr, &len,
+			     &sri,&msg_flags);
+		if(stream_increment) {
+			sri.sinfo_stream++;
+			if(sri.sinfo_stream >= sctp_get_no_strms(sock_fd,(SA *)&cliaddr, len)) 
+				sri.sinfo_stream = 0;
+		}
+		Sctp_sendmsg(sock_fd, readbuf, rd_sz, 
+			     (SA *)&cliaddr, len,
+			     sri.sinfo_ppid,
+			     sri.sinfo_flags,
+			     sri.sinfo_stream,
+			     0, 0);
+	}
+}
+```
+
+### 10.3 SCTP一到多式流分回射客户程序:main函数
+
+```c++
+#include	"unp.h"
+
+int
+main(int argc, char **argv)
+{
+	int sock_fd;
+	struct sockaddr_in servaddr;
+	struct sctp_event_subscribe evnts;
+	int echo_to_all=0;
+
+	if(argc < 2)
+		err_quit("Missing host argument - use '%s host [echo]'\n",
+		       argv[0]);
+	if(argc > 2) {
+		printf("Echoing messages to all streams\n");
+		echo_to_all = 1;
+	}
+        sock_fd = Socket(AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP);
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port = htons(SERV_PORT);
+	Inet_pton(AF_INET, argv[1], &servaddr.sin_addr);
+
+	bzero(&evnts, sizeof(evnts));
+	evnts.sctp_data_io_event = 1;
+	Setsockopt(sock_fd,IPPROTO_SCTP, SCTP_EVENTS,
+		   &evnts, sizeof(evnts));
+	if(echo_to_all == 0)
+		sctpstr_cli(stdin,sock_fd,(SA *)&servaddr,sizeof(servaddr));
+	else
+		sctpstr_cli_echoall(stdin,sock_fd,(SA *)&servaddr,sizeof(servaddr));
+	Close(sock_fd);
+	return(0);
+}
+```
+
+### 10.4 SCTP流分回射客户程序:sctpstr_cli函数
+
+```c++
+#include	"unp.h"
+
+void
+sctpstr_cli(FILE *fp, int sock_fd, struct sockaddr *to, socklen_t tolen)
+{
+	struct sockaddr_in peeraddr;
+	struct sctp_sndrcvinfo sri;
+	char sendline[MAXLINE], recvline[MAXLINE];
+	socklen_t len;
+	int out_sz,rd_sz;
+	int msg_flags;
+
+	bzero(&sri,sizeof(sri));
+	while (fgets(sendline, MAXLINE, fp) != NULL) {
+		if(sendline[0] != '[') {
+			printf("Error, line must be of the form '[streamnum]text'\n");
+			continue;
+		}
+		sri.sinfo_stream = strtol(&sendline[1],NULL,0);
+		out_sz = strlen(sendline);
+		Sctp_sendmsg(sock_fd, sendline, out_sz, 
+			     to, tolen, 
+			     0, 0,
+			     sri.sinfo_stream,
+			     0, 0);
+
+		len = sizeof(peeraddr);
+		rd_sz = Sctp_recvmsg(sock_fd, recvline, sizeof(recvline),
+			     (SA *)&peeraddr, &len,
+			     &sri,&msg_flags);
+		printf("From str:%d seq:%d (assoc:0x%x):",
+		       sri.sinfo_stream,sri.sinfo_ssn,
+		       (u_int)sri.sinfo_assoc_id);
+		printf("%.*s",rd_sz,recvline);
+	}
+}
+```
+
+### 10.5 探究头端阻塞
+
+- 头端阻塞发生在一个TCP分节丢失，导致其后续分节不按序到达接收端的时候
+- SCTP的多流特性能够尽可能减少头端阻塞
+- SCTP流可以说是一个既能避免头端阻塞又能在相关的消息之间保持顺序的有效机制
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-27 17-20-57.png)
+
+- 消息存在丢失现象，只有在同一个流内的信息才因此延缓，其他流中的消息不受影响
+
+### 10.6 控制流的数目
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-27 17-00-27.png)
+
+### 10.7 控制终结
+
+- 如果服务器希望在发送完一个应答消息后终止一个关联，那么可以在与该消息对应的sctp_sndrcvinfo结构的sinfo_flasgs字段中设置MSG_EOF标志，迫使所发送消息被客户确认后，相应关联也被终止
+- 另一个办法是把MSG_ABORT标志应用于sinfo_flags字段，该标志将以ABORT块迫使立即终止关联，类似与TCP的RST分节，能够无延迟地终止任何关联，尚未发送的任何数据都被丢弃
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-27 17-06-39.png)
+
+## 第11 章　名字与地址转换
+
+### 11.2 域名系统
+
+- 资源记录
+
+  - DNS中的条目称为资源记录
+  - A记录把一个主机名映射成一个32位的IPV4地址
+  - AAAA记录把一个主机名映射成一个128位的IPV6地址
+  - PTR记录把IP地址映射成主机名
+  - MX记录把一个主机指定作为给定主机的邮件交换器
+  - CNAME 为常用的服务指派CANME记录
+
+- 解析器和名字服务器
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-29 14-08-33.png)
+
+  - 文件/etc/resolv.conf通常包含本地名字服务器主机的IP地址
+
+- DNS替代方法
+
+  - 静态主机文件　/etc/hosts
+  - 网络信息系统
+
+### 11.3 gethostbyname
+
+- 返回一个指向hostent结构的指针，该结构包含所查找主机的所有IPv4地址
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-29 14-19-13.png)
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	char			*ptr, **pptr;
+  	char			str[INET_ADDRSTRLEN];
+  	struct hostent	*hptr;
+  
+  	while (--argc > 0) {
+  		ptr = *++argv;
+  		if ( (hptr = gethostbyname(ptr)) == NULL) {
+  			err_msg("gethostbyname error for host: %s: %s",
+  					ptr, hstrerror(h_errno));
+  			continue;
+  		}
+  		printf("official hostname: %s\n", hptr->h_name);
+  
+  		for (pptr = hptr->h_aliases; *pptr != NULL; pptr++)
+  			printf("\talias: %s\n", *pptr);
+  
+  		switch (hptr->h_addrtype) {
+  		case AF_INET:
+  			pptr = hptr->h_addr_list;
+  			for ( ; *pptr != NULL; pptr++)
+  				printf("\taddress: %s\n",
+  					Inet_ntop(hptr->h_addrtype, *pptr, str, sizeof(str)));
+  			break;
+  
+  		default:
+  			err_ret("unknown address type");
+  			break;
+  		}
+  	}
+  	exit(0);
+  }
+  ```
+
+- hstrerror以某个h_errno值作为唯一的参数，返回一个const char*指针
+
+### 11.4 gethostbyaddr
+
+- 由一个二进制IP地址找到相应的主机名
+
+### 11.5 getservbyname和getservbyport
+
+- cat /etc/services   从名字到端口号的映射关系
+- 根据给定名字查找相应服务　getservbyname
+- getservbyport根据给定端口号和可选协议查找相应服务
+
+### 11.6 getaddrinfo函数
+
+- 能够处理名字到地址以及服务到端口这两种转换，返回一个sockaddr结构
+- struct addrinfo结构
+- 在addrinfo结构中返回的信息可现成用于socket调用，随后用于适合客户的connect或sendto调用，或者是适合客户的bind调用
+
+### 11.7 gai_strerror函数
+
+### 11.8 freeaddrinfo函数
+
+- 由getaddrinfo返回的所有存储空间都是动态获取的，这些存储空间通过调用freeaddrinfo返还给系统
+- 浅复制: 只复制这个结构而不复制由它转而指向的其他结构
+- 深复制:既复制这个结构又复制它指向的所有其他结构
+
+### 11.9 getaddrinfo函数: IPV6
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-11-29 15-38-17.png)
+
+### 11.10 getaddrinfo函数: 例子
+
+- 双栈主机上的IPv6客户或服务器既能与IPv6对端通信，也能与Ipv4对端通信
+
+### 11.11 host_serv函数
+
+### 11.12 tcp_connect函数
+
+- 创建一个TCP套接字并连接到一个服务器
+
+```c++
+/* include tcp_connect */
+#include	"unp.h"
+
+int
+tcp_connect(const char *host, const char *serv)
+{
+	int				sockfd, n;
+	struct addrinfo	hints, *res, *ressave;
+
+	bzero(&hints, sizeof(struct addrinfo));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if ( (n = getaddrinfo(host, serv, &hints, &res)) != 0)
+		err_quit("tcp_connect error for %s, %s: %s",
+				 host, serv, gai_strerror(n));
+	ressave = res;
+
+	do {
+		sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+		if (sockfd < 0)
+			continue;	/* ignore this one */
+
+		if (connect(sockfd, res->ai_addr, res->ai_addrlen) == 0)
+			break;		/* success */
+
+		Close(sockfd);	/* ignore this one */
+	} while ( (res = res->ai_next) != NULL);
+
+	if (res == NULL)	/* errno set from final connect() */
+		err_sys("tcp_connect error for %s, %s", host, serv);
+
+	freeaddrinfo(ressave);
+
+	return(sockfd);
+}
+/* end tcp_connect */
+
+/*
+ * We place the wrapper function here, not in wraplib.c, because some
+ * XTI programs need to include wraplib.c, and it also defines
+ * a Tcp_connect() function.
+ */
+
+int
+Tcp_connect(const char *host, const char *serv)
+{
+	return(tcp_connect(host, serv));
+}
+```
+
+```c++
+#include	"unp.h"
+
+int
+main(int argc, char **argv)
+{
+	int				sockfd, n;
+	char			recvline[MAXLINE + 1];
+	socklen_t		len;
+	struct sockaddr_storage	ss;
+
+	if (argc != 3)
+		err_quit("usage: daytimetcpcli <hostname/IPaddress> <service/port#>");
+
+	sockfd = Tcp_connect(argv[1], argv[2]);
+
+	len = sizeof(ss);
+	Getpeername(sockfd, (SA *)&ss, &len);
+	printf("connected to %s\n", Sock_ntop_host((SA *)&ss, len));
+
+	while ( (n = Read(sockfd, recvline, MAXLINE)) > 0) {
+		recvline[n] = 0;	/* null terminate */
+		Fputs(recvline, stdout);
+	}
+	exit(0);
+}
+```
+
+### 11.13 tcp_listen函数
+
+- 创建一个TCP套接字，给它捆绑服务器众所周知端口，并允许外来的连接请求
+
+- ```c++
+  /* include tcp_listen */
+  #include	"unp.h"
+  
+  int
+  tcp_listen(const char *host, const char *serv, socklen_t *addrlenp)
+  {
+  	int				listenfd, n;
+  	const int		on = 1;
+  	struct addrinfo	hints, *res, *ressave;
+  
+  	bzero(&hints, sizeof(struct addrinfo));
+  	hints.ai_flags = AI_PASSIVE;
+  	hints.ai_family = AF_UNSPEC;
+  	hints.ai_socktype = SOCK_STREAM;
+  
+  	if ( (n = getaddrinfo(host, serv, &hints, &res)) != 0)
+  		err_quit("tcp_listen error for %s, %s: %s",
+  				 host, serv, gai_strerror(n));
+  	ressave = res;
+  
+  	do {
+  		listenfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+  		if (listenfd < 0)
+  			continue;		/* error, try next one */
+  
+  		Setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+  		if (bind(listenfd, res->ai_addr, res->ai_addrlen) == 0)
+  			break;			/* success */
+  
+  		Close(listenfd);	/* bind error, close and try next one */
+  	} while ( (res = res->ai_next) != NULL);
+  
+  	if (res == NULL)	/* errno from final socket() or bind() */
+  		err_sys("tcp_listen error for %s, %s", host, serv);
+  
+  	Listen(listenfd, LISTENQ);
+  
+  	if (addrlenp)
+  		*addrlenp = res->ai_addrlen;	/* return size of protocol address */
+  
+  	freeaddrinfo(ressave);
+  
+  	return(listenfd);
+  }
+  /* end tcp_listen */
+  
+  /*
+   * We place the wrapper function here, not in wraplib.c, because some
+   * XTI programs need to include wraplib.c, and it also defines
+   * a Tcp_listen() function.
+   */
+  
+  int
+  Tcp_listen(const char *host, const char *serv, socklen_t *addrlenp)
+  {
+  	return(tcp_listen(host, serv, addrlenp));
+  }
+  ```
+
+- ```c++
+  #include	"unp.h"
+  #include	<time.h>
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int				listenfd, connfd;
+  	socklen_t		len;
+  	char			buff[MAXLINE];
+  	time_t			ticks;
+  	struct sockaddr_storage	cliaddr;
+  
+  	if (argc != 2)
+  		err_quit("usage: daytimetcpsrv1 <service or port#>");
+  
+  	listenfd = Tcp_listen(NULL, argv[1], NULL);
+  
+  	for ( ; ; ) {
+  		len = sizeof(cliaddr);
+  		connfd = Accept(listenfd, (SA *)&cliaddr, &len);
+  		printf("connection from %s\n", Sock_ntop((SA *)&cliaddr, len));
+  
+  		ticks = time(NULL);
+  		snprintf(buff, sizeof(buff), "%.24s\r\n", ctime(&ticks));
+  		Write(connfd, buff, strlen(buff));
+  
+  		Close(connfd);
+  	}
+  }
+  ```
+
+- 运行在双栈主机上的IPv6服务器既能处理Ipv4客户，也能处理Ipv6客户，IPv4客户主机的地址作为Ipv4映射的IPv6地址传递给IPv6服务器
+
+### 11.14 udp_client函数
+
+- 创建一个未连接的UDP套接字
+
+- ```c++
+  /* include udp_client */
+  #include	"unp.h"
+  
+  int
+  udp_client(const char *host, const char *serv, SA **saptr, socklen_t *lenp)
+  {
+  	int				sockfd, n;
+  	struct addrinfo	hints, *res, *ressave;
+  
+  	bzero(&hints, sizeof(struct addrinfo));
+  	hints.ai_family = AF_UNSPEC;
+  	hints.ai_socktype = SOCK_DGRAM;
+  
+  	if ( (n = getaddrinfo(host, serv, &hints, &res)) != 0)
+  		err_quit("udp_client error for %s, %s: %s",
+  				 host, serv, gai_strerror(n));
+  	ressave = res;
+  
+  	do {
+  		sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+  		if (sockfd >= 0)
+  			break;		/* success */
+  	} while ( (res = res->ai_next) != NULL);
+  
+  	if (res == NULL)	/* errno set from final socket() */
+  		err_sys("udp_client error for %s, %s", host, serv);
+  
+  	*saptr = Malloc(res->ai_addrlen);
+  	memcpy(*saptr, res->ai_addr, res->ai_addrlen);
+  	*lenp = res->ai_addrlen;
+  
+  	freeaddrinfo(ressave);
+  
+  	return(sockfd);
+  }
+  /* end udp_client */
+  
+  int
+  Udp_client(const char *host, const char *serv, SA **saptr, socklen_t *lenptr)
+  {
+  	return(udp_client(host, serv, saptr, lenptr));
+  }
+  ```
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int				sockfd, n;
+  	char			recvline[MAXLINE + 1];
+  	socklen_t		salen;
+  	struct sockaddr	*sa;
+  
+  	if (argc != 3)
+  		err_quit("usage: daytimeudpcli1 <hostname/IPaddress> <service/port#>");
+  
+  	sockfd = Udp_client(argv[1], argv[2], (void **) &sa, &salen);
+  
+  	printf("sending to %s\n", Sock_ntop_host(sa, salen));
+  
+  	Sendto(sockfd, "", 1, 0, sa, salen);	/* send 1-byte datagram */
+  
+  	n = Recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL);
+  	recvline[n] = '\0';	/* null terminate */
+  	Fputs(recvline, stdout);
+  
+  	exit(0);
+  }
+  ```
+
+### 11.15 udp_connect函数
+
+- 创建一个已连接UDP套接字
+
+- ```c++
+  /* include udp_connect */
+  #include	"unp.h"
+  
+  int
+  udp_connect(const char *host, const char *serv)
+  {
+  	int				sockfd, n;
+  	struct addrinfo	hints, *res, *ressave;
+  
+  	bzero(&hints, sizeof(struct addrinfo));
+  	hints.ai_family = AF_UNSPEC;
+  	hints.ai_socktype = SOCK_DGRAM;
+  
+  	if ( (n = getaddrinfo(host, serv, &hints, &res)) != 0)
+  		err_quit("udp_connect error for %s, %s: %s",
+  				 host, serv, gai_strerror(n));
+  	ressave = res;
+  
+  	do {
+  		sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+  		if (sockfd < 0)
+  			continue;	/* ignore this one */
+  
+  		if (connect(sockfd, res->ai_addr, res->ai_addrlen) == 0)
+  			break;		/* success */
+  
+  		Close(sockfd);	/* ignore this one */
+  	} while ( (res = res->ai_next) != NULL);
+  
+  	if (res == NULL)	/* errno set from final connect() */
+  		err_sys("udp_connect error for %s, %s", host, serv);
+  
+  	freeaddrinfo(ressave);
+  
+  	return(sockfd);
+  }
+  /* end udp_connect */
+  
+  int
+  Udp_connect(const char *host, const char *serv)
+  {
+  	int		n;
+  
+  	if ( (n = udp_connect(host, serv)) < 0) {
+  		err_quit("udp_connect error for %s, %s: %s",
+  					 host, serv, gai_strerror(-n));
+  	}
+  	return(n);
+  }
+  ```
+
+### 11.16 udp_server函数
+
+```c++
+/* include udp_server */
+#include	"unp.h"
+
+int
+udp_server(const char *host, const char *serv, socklen_t *addrlenp)
+{
+	int				sockfd, n;
+	struct addrinfo	hints, *res, *ressave;
+
+	bzero(&hints, sizeof(struct addrinfo));
+	hints.ai_flags = AI_PASSIVE;
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_DGRAM;
+
+	if ( (n = getaddrinfo(host, serv, &hints, &res)) != 0)
+		err_quit("udp_server error for %s, %s: %s",
+				 host, serv, gai_strerror(n));
+	ressave = res;
+
+	do {
+		sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+		if (sockfd < 0)
+			continue;		/* error - try next one */
+
+		if (bind(sockfd, res->ai_addr, res->ai_addrlen) == 0)
+			break;			/* success */
+
+		Close(sockfd);		/* bind error - close and try next one */
+	} while ( (res = res->ai_next) != NULL);
+
+	if (res == NULL)	/* errno from final socket() or bind() */
+		err_sys("udp_server error for %s, %s", host, serv);
+
+	if (addrlenp)
+		*addrlenp = res->ai_addrlen;	/* return size of protocol address */
+
+	freeaddrinfo(ressave);
+
+	return(sockfd);
+}
+/* end udp_server */
+
+int
+Udp_server(const char *host, const char *serv, socklen_t *addrlenp)
+{
+	return(udp_server(host, serv, addrlenp));
+}
+```
+
+### 11.17 getnameinfo函数
+
+- 以一个套接字地址为参数，返回描述其中的主机的一个字符串和描述其中的服务的另一个字符串
+- sock_ntop和getnameinfo的差别在于，前者不涉及DNS,只返回IP地址和端口号的一个可显示版本，后者通常尝试获取主机和服务的名字
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-02 15-07-52.png)
+
+### 11.18 可重入函数
+
+- 进程的主控制流被暂停以执行信号处理函数
+- gethostbyname、gethostaddr、getservbyname  getservbyport不是可重入的,因为它们返回指向同一个静态结构的指针
+- 支持线程的一些实现同时提供这4个函数的可重入版本，以_r结尾
+- 支持线程的另一些实现，使用线程特定数据提供这些函数的可重入版本
+- inet_pton inet_ntop是可重入的
+- 许多版本的标准I/O函数库是不可重入的
+
+### 11.19 gethostbyname_r和gethostbyaddr_r函数
+
+- 把不可重入函数填写并返回静态结构的做法改为由调用者分配再由可重入函数填写结构
+- 由可重入函数调用malloc以动态分配内存空间
+
+### 11.20 作废的IPv6地址解析函数
+
+- RES_USE_INET6常值
+- gethostbyname2
+- getipnodebyname
+
+### 11.21 其他网络相关信息
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-02 15-32-51.png)
+
+- 只有主机和网络信息可通过DNS获取，协议和服务信息总是从相应的文件中读取
+- man resolver  直接调用解析器函数的手册
