@@ -4056,9 +4056,964 @@
 
 
 
+### 第17章高级进程间通信
 
-​     
+- UNIX域套接字机制，这种形式的IPC可以在同一台计算机系统上运行的两个进程之间传送打开的文件描述符
 
+### 17.2 UNIX域套接字
+
+- UNIX域套接字用于同一台计算机上运行的进程之间的通信，因特网域套接字可用于同一目的，但UNIX域套接字效率更高
+
+- 流
+
+- 数据报，UNIX域数据报服务是可靠的
+
+- UNIX域套接字就像是套接字和管道的混合，可以使用它们面向网络的域套接字接口
+
+- 使用socketpair函数创建一对无名的、相互连接的UNIX域套接字，一对相互连接的UNIX域套接字可以起到**全双工管道**的作用，称为fd管道
+
+- 借助UNIX域套接字轮训XSI消息队列,对每个消息队列使用一个线程，每个线程都会在msgrcv调用中阻塞，当消息到达时，线程会把它写入一个UNIX域套接字的一端，当poll指示套接字可以读取数据时，应用程序会使用这个套接字的另外一端来接收这个消息
+
+- ```c++
+  #include "apue.h"
+  #include <poll.h>
+  #include <pthread.h>
+  #include <sys/msg.h>
+  #include <sys/socket.h>
   
-
+  #define NQ		3		/* number of queues */
+  #define MAXMSZ	512		/* maximum message size */
+  #define KEY		0x123	/* key for first message queue */
   
+  struct threadinfo {
+  	int qid;
+  	int fd;
+  };
+  
+  struct mymesg {
+  	long mtype;
+  	char mtext[MAXMSZ];
+  };
+  
+  void *
+  helper(void *arg)
+  {
+  	int					n;
+  	struct mymesg		m;
+  	struct threadinfo	*tip = arg;
+  
+  	for(;;) {
+  		memset(&m, 0, sizeof(m));
+  		if ((n = msgrcv(tip->qid, &m, MAXMSZ, 0, MSG_NOERROR)) < 0)
+  			err_sys("msgrcv error");
+  		if (write(tip->fd, m.mtext, n) < 0)
+  			err_sys("write error");
+  	}
+  }
+  
+  int
+  main()
+  {
+  	int					i, n, err;
+  	int					fd[2];
+  	int					qid[NQ];
+  	struct pollfd		pfd[NQ];
+  	struct threadinfo	ti[NQ];
+  	pthread_t			tid[NQ];
+  	char				buf[MAXMSZ];
+  
+  	for (i = 0; i < NQ; i++) {
+  		if ((qid[i] = msgget((KEY+i), IPC_CREAT|0666)) < 0)
+  			err_sys("msgget error");
+  
+  		printf("queue ID %d is %d\n", i, qid[i]);
+  
+  		if (socketpair(AF_UNIX, SOCK_DGRAM, 0, fd) < 0)
+  			err_sys("socketpair error");
+  		pfd[i].fd = fd[0];
+  		pfd[i].events = POLLIN;
+  		ti[i].qid = qid[i];
+  		ti[i].fd = fd[1];
+  		if ((err = pthread_create(&tid[i], NULL, helper, &ti[i])) != 0)
+  			err_exit(err, "pthread_create error");
+  	}
+  
+  	for (;;) {
+  		if (poll(pfd, NQ, -1) < 0)
+  			err_sys("poll error");
+  		for (i = 0; i < NQ; i++) {
+  			if (pfd[i].revents & POLLIN) {
+  				if ((n = read(pfd[i].fd, buf, sizeof(buf))) < 0)
+  					err_sys("read error");
+  				buf[n] = 0;
+  				printf("queue id %d, message %s\n", qid[i], buf);
+  			}
+  		}
+  	}
+  
+  	exit(0);
+  }
+  ```
+
+- 使用数据报套接字可以保证消息边界
+
+- 给XSI消息队列发送消息
+
+- ```c++
+  #include "apue.h"
+  #include <sys/msg.h>
+  
+  #define MAXMSZ 512
+  
+  struct mymesg {
+  	long mtype;
+  	char mtext[MAXMSZ];
+  };
+  
+  int
+  main(int argc, char *argv[])
+  {
+  	key_t key;
+  	long qid;
+  	size_t nbytes;
+  	struct mymesg m;
+  
+  	if (argc != 3) {
+  		fprintf(stderr, "usage: sendmsg KEY message\n");
+  		exit(1);
+  	}
+  	key = strtol(argv[1], NULL, 0);
+  	if ((qid = msgget(key, 0)) < 0)
+  		err_sys("can't open queue key %s", argv[1]);
+  	memset(&m, 0, sizeof(m));
+  	strncpy(m.mtext, argv[2], MAXMSZ-1);
+  	nbytes = strlen(m.mtext);
+  	m.mtype = 1;
+  	if (msgsnd(qid, &m, nbytes, 0) < 0)
+  		err_sys("can't send message");
+  	exit(0);
+  }
+  ```
+
+- ```shell
+  ./pollmsg &
+  ./sendmsg 0x123 "hello world"
+  ```
+
+- 命名UNIX域套接字
+
+  - UNIX域套接字使用的地址由sockaddr_un结构表示
+
+  - ```
+    struct sockaddr_un{
+        sa_family_t sun_family;
+        char sun_path[108];
+    }
+    ```
+
+  - 当将一个地址绑定到一个UNIX域套接字时，系统会用该路径名创建一个S_IFSOCK类型的文件
+
+  - ```c++
+    #include "apue.h"
+    #include <sys/socket.h>
+    #include <sys/un.h>
+    
+    int
+    main(void)
+    {
+    	int fd, size;
+    	struct sockaddr_un un;
+    
+    	un.sun_family = AF_UNIX;
+    	strcpy(un.sun_path, "foo.socket");
+    	if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
+    		err_sys("socket failed");
+    	size = offsetof(struct sockaddr_un, sun_path) + strlen(un.sun_path);
+    	if (bind(fd, (struct sockaddr *)&un, size) < 0)
+    		err_sys("bind failed");
+    	printf("UNIX domain socket bound\n");
+    	exit(0);
+    }
+    ```
+
+### 17.3 唯一连接
+
+- 服务器进程可以使用标准bind listen 和accept函数，为客户进程安排一个唯一UNIX域连接，客户进程使用connect与服务器进程联系，在服务器进程接受了connect请求后，在服务器进程和客户进程之间就存在了唯一连接
+- serv_listen函数
+- serv_accept函数
+- cli_conn函数
+
+### 17.4 传送文件描述符
+
+- 传送一个打开的文件描述符，想让发送进程和接收进程共享同一文件表项
+
+- 将指向一个打开文件表项的指针从一个进程发送到另外一个进程，该指针被分配存在在接收进程的第一个可用描述符中，两个进程共享同一个打开文件表
+
+- send_fd
+
+- send_err
+
+- recv_fd
+
+- 为了用UNIX域套接字交换文件描述符，调用sendmsg和recvmsg函数，通过一个指向msghdr结构的指针，msg_control字段指向cmsghdr结构
+
+- 通过UNIX域套接字发送证书，将证书作为cmsgcred或ucred结构发送
+
+- ```c++
+  #include "apue.h"
+  #include <sys/socket.h>
+  
+  #if defined(SCM_CREDS)			/* BSD interface */
+  #define CREDSTRUCT		cmsgcred
+  #define SCM_CREDTYPE	SCM_CREDS
+  #elif defined(SCM_CREDENTIALS)	/* Linux interface */
+  #define CREDSTRUCT		ucred
+  #define SCM_CREDTYPE	SCM_CREDENTIALS
+  #else
+  #error passing credentials is unsupported!
+  #endif
+  
+  /* size of control buffer to send/recv one file descriptor */
+  #define RIGHTSLEN	CMSG_LEN(sizeof(int))
+  #define CREDSLEN	CMSG_LEN(sizeof(struct CREDSTRUCT))
+  #define	CONTROLLEN	(RIGHTSLEN + CREDSLEN)
+  
+  static struct cmsghdr	*cmptr = NULL;	/* malloc'ed first time */
+  
+  /*
+   * Pass a file descriptor to another process.
+   * If fd<0, then -fd is sent back instead as the error status.
+   */
+  int
+  send_fd(int fd, int fd_to_send)
+  {
+  	struct CREDSTRUCT	*credp;
+  	struct cmsghdr		*cmp;
+  	struct iovec		iov[1];
+  	struct msghdr		msg;
+  	char				buf[2];	/* send_fd/recv_ufd 2-byte protocol */
+  
+  	iov[0].iov_base = buf;
+  	iov[0].iov_len  = 2;
+  	msg.msg_iov     = iov;
+  	msg.msg_iovlen  = 1;
+  	msg.msg_name    = NULL;
+  	msg.msg_namelen = 0;
+  	msg.msg_flags = 0;
+  	if (fd_to_send < 0) {
+  		msg.msg_control    = NULL;
+  		msg.msg_controllen = 0;
+  		buf[1] = -fd_to_send;	/* nonzero status means error */
+  		if (buf[1] == 0)
+  			buf[1] = 1;	/* -256, etc. would screw up protocol */
+  	} else {
+  		if (cmptr == NULL && (cmptr = malloc(CONTROLLEN)) == NULL)
+  			return(-1);
+  		msg.msg_control    = cmptr;
+  		msg.msg_controllen = CONTROLLEN;
+  		cmp = cmptr;
+  		cmp->cmsg_level  = SOL_SOCKET;
+  		cmp->cmsg_type   = SCM_RIGHTS;
+  		cmp->cmsg_len    = RIGHTSLEN;
+  		*(int *)CMSG_DATA(cmp) = fd_to_send;	/* the fd to pass */
+  		cmp = CMSG_NXTHDR(&msg, cmp);
+  		cmp->cmsg_level  = SOL_SOCKET;
+  		cmp->cmsg_type   = SCM_CREDTYPE;
+  		cmp->cmsg_len    = CREDSLEN;
+  		credp = (struct CREDSTRUCT *)CMSG_DATA(cmp);
+  #if defined(SCM_CREDENTIALS)
+  		credp->uid = geteuid();
+  		credp->gid = getegid();
+  		credp->pid = getpid();
+  #endif
+  		buf[1] = 0;		/* zero status means OK */
+  	}
+  	buf[0] = 0;			/* null byte flag to recv_ufd() */
+  	if (sendmsg(fd, &msg, 0) != 2)
+  		return(-1);
+  	return(0);
+  }
+  ```
+
+- ```c++
+  #include "apue.h"
+  #include <sys/socket.h>		/* struct msghdr */
+  #include <sys/un.h>
+  
+  #if defined(SCM_CREDS)			/* BSD interface */
+  #define CREDSTRUCT		cmsgcred
+  #define CR_UID			cmcred_uid
+  #define SCM_CREDTYPE	SCM_CREDS
+  #elif defined(SCM_CREDENTIALS)	/* Linux interface */
+  #define CREDSTRUCT		ucred
+  #define CR_UID			uid
+  #define CREDOPT			SO_PASSCRED
+  #define SCM_CREDTYPE	SCM_CREDENTIALS
+  #else
+  #error passing credentials is unsupported!
+  #endif
+  
+  /* size of control buffer to send/recv one file descriptor */
+  #define RIGHTSLEN	CMSG_LEN(sizeof(int))
+  #define CREDSLEN	CMSG_LEN(sizeof(struct CREDSTRUCT))
+  #define	CONTROLLEN	(RIGHTSLEN + CREDSLEN)
+  
+  static struct cmsghdr	*cmptr = NULL;		/* malloc'ed first time */
+  
+  /*
+   * Receive a file descriptor from a server process.  Also, any data
+   * received is passed to (*userfunc)(STDERR_FILENO, buf, nbytes).
+   * We have a 2-byte protocol for receiving the fd from send_fd().
+   */
+  int
+  recv_ufd(int fd, uid_t *uidptr,
+           ssize_t (*userfunc)(int, const void *, size_t))
+  {
+  	struct cmsghdr		*cmp;
+  	struct CREDSTRUCT	*credp;
+  	char				*ptr;
+  	char				buf[MAXLINE];
+  	struct iovec		iov[1];
+  	struct msghdr		msg;
+  	int					nr;
+  	int					newfd = -1;
+  	int					status = -1;
+  #if defined(CREDOPT)
+  	const int			on = 1;
+  
+  	if (setsockopt(fd, SOL_SOCKET, CREDOPT, &on, sizeof(int)) < 0) {
+  		err_ret("setsockopt error");
+  		return(-1);
+  	}
+  #endif
+  	for ( ; ; ) {
+  		iov[0].iov_base = buf;
+  		iov[0].iov_len  = sizeof(buf);
+  		msg.msg_iov     = iov;
+  		msg.msg_iovlen  = 1;
+  		msg.msg_name    = NULL;
+  		msg.msg_namelen = 0;
+  		if (cmptr == NULL && (cmptr = malloc(CONTROLLEN)) == NULL)
+  			return(-1);
+  		msg.msg_control    = cmptr;
+  		msg.msg_controllen = CONTROLLEN;
+  		if ((nr = recvmsg(fd, &msg, 0)) < 0) {
+  			err_ret("recvmsg error");
+  			return(-1);
+  		} else if (nr == 0) {
+  			err_ret("connection closed by server");
+  			return(-1);
+  		}
+  
+  		/*
+  		 * See if this is the final data with null & status.  Null
+  		 * is next to last byte of buffer; status byte is last byte.
+  		 * Zero status means there is a file descriptor to receive.
+  		 */
+  		for (ptr = buf; ptr < &buf[nr]; ) {
+  			if (*ptr++ == 0) {
+  				if (ptr != &buf[nr-1])
+  					err_dump("message format error");
+   				status = *ptr & 0xFF;	/* prevent sign extension */
+   				if (status == 0) {
+  					if (msg.msg_controllen != CONTROLLEN)
+  						err_dump("status = 0 but no fd");
+  
+  					/* process the control data */
+  					for (cmp = CMSG_FIRSTHDR(&msg);
+  					  cmp != NULL; cmp = CMSG_NXTHDR(&msg, cmp)) {
+  						if (cmp->cmsg_level != SOL_SOCKET)
+  							continue;
+  						switch (cmp->cmsg_type) {
+  						case SCM_RIGHTS:
+  							newfd = *(int *)CMSG_DATA(cmp);
+  							break;
+  						case SCM_CREDTYPE:
+  							credp = (struct CREDSTRUCT *)CMSG_DATA(cmp);
+  							*uidptr = credp->CR_UID;
+  						}
+  					}
+  				} else {
+  					newfd = -status;
+  				}
+  				nr -= 2;
+  			}
+  		}
+  		if (nr > 0 && (*userfunc)(STDERR_FILENO, buf, nr) != nr)
+  			return(-1);
+  		if (status >= 0)	/* final data has arrived */
+  			return(newfd);	/* descriptor, or -status */
+  	}
+  }
+  ```
+
+
+
+### 17.5 open服务器进程第一版
+
+- 从客户进程到服务器进程传送文件名和打开模式，而从服务进程到客户进程返回描述符，文件内容不需要通过IPC交换
+
+### 17.6 open服务器进程第2版
+
+- 一个守护进程方式的open服务器进程，一个服务器进程处理所有客户进程的请求
+- getopt
+
+## 第18章　终端I/O
+
+### 18.2 综述
+
+- 终端I/O的两种工作模式
+
+  - 规范模式输入处理，以行为单位
+  - 非规范模式输入处理
+
+- 终端设备是由通常位于内核中的终端驱动程序控制的，每个终端设备都有一个输入队列和输出队列
+
+- 终端行规程中进行规范处理，位于内核读写函数和实际设备驱动程序之间
+
+- 所有可以检测和更改的终端设备特性都包含在termios结构中,终端标志
+
+- ```c++
+  struct termios{
+      tcflag_t c_iflag;
+      tcflag_t c_oflag;
+      tcflag_t c_cflag;
+      tcflag_t c_lflag;
+      cc_t c_cc[NCCS];
+  };
+  ```
+
+- 13个终端I/O函数
+
+  - tcgetattr
+  - tcsetattr
+  - cfgetispeed
+  - cfgetospeed
+  - cfsetispeed
+  - cfsetospeed
+  - tcdrain
+  - tcflow
+  - tcflush
+  - tcsendbreak
+  - tcgetpgrp
+  - tcsetprgp
+  - tcgetsid
+
+### 18.3 特殊输入字符
+
+- 11个在输入时要特殊处理的字符
+
+- 将c_cc数组中的某项设置为_POSIX_VDISABLE的值，则禁止使用相应特殊字符
+
+- ```c++
+  #include "apue.h"
+  #include <termios.h>
+  
+  int
+  main(void)
+  {
+  	struct termios	term;
+  	long			vdisable;
+  
+  	if (isatty(STDIN_FILENO) == 0)
+  		err_quit("standard input is not a terminal device");
+  
+  	if ((vdisable = fpathconf(STDIN_FILENO, _PC_VDISABLE)) < 0)
+  		err_quit("fpathconf error or _POSIX_VDISABLE not in effect");
+  
+  	if (tcgetattr(STDIN_FILENO, &term) < 0)	/* fetch tty state */
+  		err_sys("tcgetattr error");
+  
+  	term.c_cc[VINTR] = vdisable;	/* disable INTR character */
+  	term.c_cc[VEOF]  = 2;			/* EOF is Control-B */
+  
+  	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &term) < 0)
+  		err_sys("tcsetattr error");
+  
+  	exit(0);
+  }
+  ```
+
+- CR
+
+- DISCARD
+
+- DSUSP
+
+- EOF
+
+- EOL
+
+- EOL2
+
+- ERASE
+
+- ERASE2
+
+- INTR
+
+- KILL
+
+- LNEXT
+
+- NL
+
+- QUIT
+
+- REPRINT
+
+- START
+
+- STATUS
+
+- STOP
+
+- SUSP
+
+- WERSAE
+
+- BREAK 异步串行数据传送时发生的一个条件
+
+
+
+### 18.4 获得和设置终端属性
+
+- tcgetattr
+- tcsetattr
+- 这两个函数只对终端设备进行操作
+
+### 18.5 终端选项标志
+
+- ```c++
+  #include "apue.h"
+  #include <termios.h>
+  
+  int
+  main(void)
+  {
+  	struct termios	term;
+  
+  	if (tcgetattr(STDIN_FILENO, &term) < 0)
+  		err_sys("tcgetattr error");
+  
+  	switch (term.c_cflag & CSIZE) {
+  	case CS5:
+  		printf("5 bits/byte\n");
+  		break;
+  	case CS6:
+  		printf("6 bits/byte\n");
+  		break;
+  	case CS7:
+  		printf("7 bits/byte\n");
+  		break;
+  	case CS8:
+  		printf("8 bits/byte\n");
+  		break;
+  	default:
+  		printf("unknown bits/byte\n");
+  	}
+  
+  	term.c_cflag &= ~CSIZE;		/* zero out the bits */
+  	term.c_cflag |= CS8;		/* set 8 bits/byte */
+  	if (tcsetattr(STDIN_FILENO, TCSANOW, &term) < 0)
+  		err_sys("tcsetattr error");
+  
+  	exit(0);
+  }
+  ```
+
+- 各选项标志
+
+### 18.6 stty命令
+
+- 在程序中使用tcgetattr和tcsetattr函数进行选项的检查和更改
+- 在命令行中使用stty命令进行检查和更改
+- stty -a 显示终端的所有选项
+- stty命令使用它的标准输入获得和设置终端的选项标志
+- 如果希望了解名为ttyla的终端的设置，可以键入　stty -a</dev/ttyla
+
+### 18.7 波特率函数
+
+- 位/秒
+- cfgetispeed
+- cfgetospedd
+- cfsetispeed
+- cfsetospeed
+- 输入、输出波特率是存储在设备的termio结构中的
+
+### 18.8 行控制函数
+
+- tcdrain
+- tcflow
+- tcflush
+- tcsendbreak
+
+### 18.9 终端标识
+
+- 大多数UNIX系统的控制终端的名字一直是/dev/tty
+
+- ctermid 函数确定控制终端名
+
+- ```c++
+  #include	<stdio.h>
+  #include	<string.h>
+  
+  static char	ctermid_name[L_ctermid];
+  
+  char *
+  ctermid(char *str)
+  {
+  	if (str == NULL)
+  		str = ctermid_name;
+  	return(strcpy(str, "/dev/tty"));	/* strcpy() returns str */
+  }
+  ```
+
+- 如果文件描述符引用一个终端设备，则isatty返回真
+
+- ```c++
+  #include	<termios.h>
+  
+  int
+  isatty(int fd)
+  {
+  	struct termios	ts;
+  
+  	return(tcgetattr(fd, &ts) != -1); /* true if no error (is a tty) */
+  }
+  ```
+
+- ttyname 返回的是在该描述符上打开的终端设备的路径名
+
+- ```c++
+  #include	<sys/stat.h>
+  #include	<dirent.h>
+  #include	<limits.h>
+  #include	<string.h>
+  #include	<termios.h>
+  #include	<unistd.h>
+  #include	<stdlib.h>
+  
+  struct devdir {
+  	struct devdir	*d_next;
+  	char			*d_name;
+  };
+  
+  static struct devdir	*head;
+  static struct devdir	*tail;
+  static char				pathname[_POSIX_PATH_MAX + 1];
+  
+  static void
+  add(char *dirname)
+  {
+  	struct devdir	*ddp;
+  	int				len;
+  
+  	len = strlen(dirname);
+  
+  	/*
+  	 * Skip ., .., and /dev/fd.
+  	 */
+  	if ((dirname[len-1] == '.') && (dirname[len-2] == '/' ||
+  	  (dirname[len-2] == '.' && dirname[len-3] == '/')))
+  		return;
+  	if (strcmp(dirname, "/dev/fd") == 0)
+  		return;
+  	if ((ddp = malloc(sizeof(struct devdir))) == NULL)
+  		return;
+  
+  	if ((ddp->d_name = strdup(dirname)) == NULL) {
+  		free(ddp);
+  		return;
+  	}
+  
+  	ddp->d_next = NULL;
+  	if (tail == NULL) {
+  		head = ddp;
+  		tail = ddp;
+  	} else {
+  		tail->d_next = ddp;
+  		tail = ddp;
+  	}
+  }
+  
+  static void
+  cleanup(void)
+  {
+  	struct devdir	*ddp, *nddp;
+  
+  	ddp = head;
+  	while (ddp != NULL) {
+  		nddp = ddp->d_next;
+  		free(ddp->d_name);
+  		free(ddp);
+  		ddp = nddp;
+  	}
+  	head = NULL;
+  	tail = NULL;
+  }
+  
+  static char *
+  searchdir(char *dirname, struct stat *fdstatp)
+  {
+  	struct stat		devstat;
+  	DIR				*dp;
+  	int				devlen;
+  	struct dirent	*dirp;
+  
+  	strcpy(pathname, dirname);
+  	if ((dp = opendir(dirname)) == NULL)
+  		return(NULL);
+  	strcat(pathname, "/");
+  	devlen = strlen(pathname);
+  	while ((dirp = readdir(dp)) != NULL) {
+  		strncpy(pathname + devlen, dirp->d_name,
+  		  _POSIX_PATH_MAX - devlen);
+  
+  		/*
+  		 * Skip aliases.
+  		 */
+  		if (strcmp(pathname, "/dev/stdin") == 0 ||
+  		  strcmp(pathname, "/dev/stdout") == 0 ||
+  		  strcmp(pathname, "/dev/stderr") == 0)
+  			continue;
+  		if (stat(pathname, &devstat) < 0)
+  			continue;
+  		if (S_ISDIR(devstat.st_mode)) {
+  			add(pathname);
+  			continue;
+  		}
+  		if (devstat.st_ino == fdstatp->st_ino &&
+  		  devstat.st_dev == fdstatp->st_dev) {	/* found a match */
+  			closedir(dp);
+  			return(pathname);
+  		}
+  	}
+  
+  	closedir(dp);
+  	return(NULL);
+  }
+  
+  char *
+  ttyname(int fd)
+  {
+  	struct stat		fdstat;
+  	struct devdir	*ddp;
+  	char			*rval;
+  
+  	if (isatty(fd) == 0)
+  		return(NULL);
+  	if (fstat(fd, &fdstat) < 0)
+  		return(NULL);
+  	if (S_ISCHR(fdstat.st_mode) == 0)
+  		return(NULL);
+  
+  	rval = searchdir("/dev", &fdstat);
+  	if (rval == NULL) {
+  		for (ddp = head; ddp != NULL; ddp = ddp->d_next)
+  			if ((rval = searchdir(ddp->d_name, &fdstat)) != NULL)
+  				break;
+  	}
+  
+  	cleanup();
+  	return(rval);
+  }
+  ```
+
+- 每个文件设备都有一个唯一的设备号，每个目录项都有一个唯一的i节点编号
+
+- ```c++
+  #include "apue.h"
+  
+  int
+  main(void)
+  {
+  	char *name;
+  	if (isatty(0)) {
+  		name = ttyname(0);
+  		if (name == NULL)
+  			name = "undefined";
+  	} else {
+  		name = "not a tty";
+  	}
+  	printf("fd 0: %s\n", name);
+  
+  	if (isatty(1)) {
+  		name = ttyname(1);
+  		if (name == NULL)
+  			name = "undefined";
+  	} else {
+  		name = "not a tty";
+  	}
+  	printf("fd 1: %s\n", name);
+  
+  	if (isatty(2)) {
+  		name = ttyname(2);
+  		if (name == NULL)
+  			name = "undefined";
+  	} else {
+  		name = "not a tty";
+  	}
+  	printf("fd 2: %s\n", name);
+  
+  	exit(0);
+  }
+  ```
+
+
+### 18.10 规范模式
+
+- 发一个读请求，当一行已经输入后，终端驱动程序即返回
+
+- getpass函数，为了读取口令，该函数必须关闭回显，但仍可使终端以规范模式进行工作
+
+- ```c++
+  #include	<signal.h>
+  #include	<stdio.h>
+  #include	<termios.h>
+  
+  #define	MAX_PASS_LEN	8		/* max #chars for user to enter */
+  
+  char *
+  getpass(const char *prompt)
+  {
+  	static char		buf[MAX_PASS_LEN + 1];	/* null byte at end */
+  	char			*ptr;
+  	sigset_t		sig, osig;
+  	struct termios	ts, ots;
+  	FILE			*fp;
+  	int				c;
+  
+  	if ((fp = fopen(ctermid(NULL), "r+")) == NULL)
+  		return(NULL);
+  	setbuf(fp, NULL);
+  
+  	sigemptyset(&sig);
+  	sigaddset(&sig, SIGINT);		/* block SIGINT */
+  	sigaddset(&sig, SIGTSTP);		/* block SIGTSTP */
+  	sigprocmask(SIG_BLOCK, &sig, &osig);	/* and save mask */
+  
+  	tcgetattr(fileno(fp), &ts);		/* save tty state */
+  	ots = ts;						/* structure copy */
+  	ts.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL);
+  	tcsetattr(fileno(fp), TCSAFLUSH, &ts);
+  	fputs(prompt, fp);
+  
+  	ptr = buf;
+  	while ((c = getc(fp)) != EOF && c != '\n')
+  		if (ptr < &buf[MAX_PASS_LEN])
+  			*ptr++ = c;
+  	*ptr = 0;			/* null terminate */
+  	putc('\n', fp);		/* we echo a newline */
+  
+  	tcsetattr(fileno(fp), TCSAFLUSH, &ots); /* restore TTY state */
+  	sigprocmask(SIG_SETMASK, &osig, NULL);  /* restore mask */
+  	fclose(fp);			/* done with /dev/tty */
+  	return(buf);
+  }
+  ```
+
+### 18.11 非规范模式
+
+- 可以通过关闭termios结构中的c_lflag字段的ICANON标志来指定非规范模式，在非规范模式下，输入数据不装配成行，不处理下列特殊字符:
+- 当已经读了指定量的数据后，或者已经超过了给定量的时间后，即通知系统返回
+- MIN, TIME
+- 在要转入非规范模式时，将整个termios结构保存起来，以后再转回规范模式时恢复它
+- cbreak模式
+- 原始模式
+
+### 18.12 终端窗口大小
+
+- winsize结构
+
+- 用ioctl的TIOCGWINSZ命令可以取此结构的当前值
+
+- 用ioctl的TIOCSWINSZ命令可以将此结构的新值存储到内核
+
+- ```c++
+  #include "apue.h"
+  #include <termios.h>
+  #ifndef	TIOCGWINSZ
+  #include <sys/ioctl.h>
+  #endif
+  
+  static void
+  pr_winsize(int fd)
+  {
+  	struct winsize	size;
+  
+  	if (ioctl(fd, TIOCGWINSZ, (char *) &size) < 0)
+  		err_sys("TIOCGWINSZ error");
+  	printf("%d rows, %d columns\n", size.ws_row, size.ws_col);
+  }
+  
+  static void
+  sig_winch(int signo)
+  {
+  	printf("SIGWINCH received\n");
+  	pr_winsize(STDIN_FILENO);
+  }
+  
+  int
+  main(void)
+  {
+  	if (isatty(STDIN_FILENO) == 0)
+  		exit(1);
+  	if (signal(SIGWINCH, sig_winch) == SIG_ERR)
+  		err_sys("signal error");
+  	pr_winsize(STDIN_FILENO);	/* print initial size */
+  	for ( ; ; )					/* and sleep forever */
+  		pause();
+  }
+  ```
+
+### 18.13 termcap terminfo  curses
+
+
+
+## 第19章　伪终端
+
+### 19.2 概述
+
+- 伪终端: 对一个应用程序而言，它看上去像一个终端，但事实上它不是一个真正的终端
+- 使用伪终端的相关进程的典型结构
+- 网络登录服务器，伪终端可用于构造提供网络登录的服务器
+- 窗口系统终端模拟，终端模拟器作为shell和窗口管理器之间的媒介，每个shell在自己的窗口中执行
+- script程序
+- expect程序
+- 运行协同程序，将一个伪终端放到两个进程之间，诱使协同进程认为它是由终端驱动的，而非另一个进程
+- 观看长时间运行程序的输出，在pty下运行该程序，让标准I/O库认为标准输出是终端
+
+### 19.3 打开伪终端设备
+
+- posix_openpt
+- grantpt
+- unlockpt
+- ptsname函数找到伪终端从设备的路径名
+- ptym_open
+- ptys_open
+
+### 19.4 函数pty_fork
+
+- 用fork调用打开主设备和从设备，创建作为会话首进程的子进程并使其具有控制终端
+
+### 19.5 pty程序
+
+- 当用pty来执行另一个程序时，那个程序在一个它自己的会话中执行，并和一个伪终端连接
+- loop函数仅仅是将从标准输入接收到的所有内容复制到PTY主设备，并将PTY主设备接收到的所有内容复制到标准输出
+
+### 19.6 使用pty程序
+
+- 一般使用伪终端的程序将不能对utmp文件进行写操作
+- 作业控制交互
+
+### 19.7 高级特性
+
+- <https://www.cnblogs.com/zzdyyy/p/7538077.html>
+- `/dev/pts/`文件夹里的以数字命名的文件就是伪终端的设备文件。
+- linux中的每个进程有一个“控制终端（control terminal）”的属性（取值为设备文件），用于实现作业控制。在终端上输入Ctrl+C、Ctrl+Z，则以该终端为控制终端的前台进程组会收到终止、暂停的信号。
+- 终端模拟器是应用程序，用于模拟一个终端。它一般是GUI程序，带有窗口。从窗口输入的字符作为模拟键盘的输入，在窗口上打印的字符作为模拟显示器的输出。终端模拟器还需要创建模拟的终端设备（如`/dev/pts/1`），用于当做命令行进程（CLI进程）的输入输出、控制终端。当键盘键入一个字符，它要让CLI进程从终端设备中读到这个字符，当CLI进程写入终端设备时，终端模拟器要读到并显示出来
+- 伪终端是伪终端master和伪终端slave（终端设备文件）这一对字符设备。`/dev/ptmx`是用于创建一对master、slave的文件。当一个进程打开它时，获得了一个master的文件描述符（file descriptor），同时在`/dev/pts`下创建了一个slave设备文件。
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-10 14-51-02.png)
+
+- 当终端模拟器运行时，它通过`/dev/ptmx`打开master端，创建了一个伪终端对，并让shell运行在slave端。当用户在终端模拟器中按下键盘按键时，它产生字节流并写入master中，shell便可从slave中读取输入；shell和它的子程序，将输出内容写入slave中，由终端模拟器负责将字符打印到窗口中。

@@ -2127,6 +2127,45 @@ Udp_server(const char *host, const char *serv, socklen_t *addrlenp)
 ### 11.21 其他网络相关信息
 
 - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-02 15-32-51.png)
-
 - 只有主机和网络信息可通过DNS获取，协议和服务信息总是从相应的文件中读取
 - man resolver  直接调用解析器函数的手册
+
+## 第12章　IPv4与IPv6的互操作性
+
+### 12.2 IPv4客户与IPv6服务器
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-10 15-06-04.png)
+
+- 双栈主机
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-10 15-14-49.png)
+
+### 12.3 IPv6客户与IPv4服务器
+
+- 如果一个IPv6的TCP客户指定一个IPv4地址映射的IPv6地址以调用connect,或者一个IPv6的UDP客户指定一个IPv4映射的IPv6地址以调用sendto,那么内核检测到这个映射地址后改为发送一个IPv4数据报而不是IPv6数据报
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-10 15-26-30.png)
+
+### 12.4 IPv6地址测试宏
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-10 15-32-16.png)
+
+### 12.5 源代码可移植性
+
+## 第13章　守护进程和inetd超级服务器
+
+- 守护进程是在后台运行且不与任何控制终端关联的进程
+- 守护进程的启动方法
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-10 15-45-11.png)
+
+### 13.2 syslogd守护进程
+
+- syslogd守护进程通常由某个系统初始化脚本启动
+- syslogd在启动时执行以下步骤
+  - 读取配置文件，/etc/syslog.cnf
+  - 创建一个UNix域套接字，捆绑路径名
+  - 创建一个UDP套接字，捆绑端口514
+  - 打开路径名/dev/klog
+  - 调用select等待以上三个描述符
+
+### 13.3 syslog函数
+
+- 当syslog被应用进程首次调用时，它创建一个Unix域套接字，然后调用connect连接到由syslogd守护进程创建的Unix域数据报套接字的众所周知的路径名
