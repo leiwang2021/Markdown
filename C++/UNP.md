@@ -2169,3 +2169,2205 @@ Udp_server(const char *host, const char *serv, socklen_t *addrlenp)
 ### 13.3 syslog函数
 
 - 当syslog被应用进程首次调用时，它创建一个Unix域套接字，然后调用connect连接到由syslogd守护进程创建的Unix域数据报套接字的众所周知的路径名
+
+### 13.4 daemon_init函数
+
+- 把一个普通进程转化为守护进程
+
+- ```c++
+  #include	"unp.h"
+  #include	<syslog.h>
+  
+  #define	MAXFD	64
+  
+  extern int	daemon_proc;	/* defined in error.c */
+  
+  int
+  daemon_init(const char *pname, int facility)
+  {
+  	int		i;
+  	pid_t	pid;
+  
+  	if ( (pid = Fork()) < 0)
+  		return (-1);
+  	else if (pid)
+  		_exit(0);			/* parent terminates */
+  
+  	/* child 1 continues... */
+  
+  	if (setsid() < 0)			/* become session leader */
+  		return (-1);
+  
+  	Signal(SIGHUP, SIG_IGN);
+  	if ( (pid = Fork()) < 0)
+  		return (-1);
+  	else if (pid)
+  		_exit(0);			/* child 1 terminates */
+  
+  	/* child 2 continues... */
+  
+  	daemon_proc = 1;			/* for err_XXX() functions */
+  
+  	chdir("/");				/* change working directory */
+  
+  	/* close off file descriptors */
+  	for (i = 0; i < MAXFD; i++)
+  		close(i);
+  
+  	/* redirect stdin, stdout, and stderr to /dev/null */
+  	open("/dev/null", O_RDONLY);
+  	open("/dev/null", O_RDWR);
+  	open("/dev/null", O_RDWR);
+  
+  	openlog(pname, LOG_PID, facility);
+  
+  	return (0);				/* success */
+  }
+  ```
+
+### 13.5 inetd守护进程
+
+- 通过由inetd处理普通守护进程的大部分启动细节以简化守护进程的编写
+- 单个进程(inetd)就能为多个服务等待外来的客户请求，以此取代每个服务一个进程的做法
+- inetd进程处理配置文件/etc/inetd.conf的配置文件指定本超级服务器处理哪些服务以及当一个服务到达时该怎么做
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-10 16-12-06.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-10 16-14-18.png)
+
+- Linux中的xinetd 
+
+
+
+### 13.6 daemon_inetd函数
+
+### 第14章　高级I/O函数
+
+### 14.2 套接字超时
+
+- 使用SIGALRM为connect设置超时
+
+  - ```c++
+    /* include connect_timeo */
+    #include	"unp.h"
+    
+    static void	connect_alarm(int);
+    
+    int
+    connect_timeo(int sockfd, const SA *saptr, socklen_t salen, int nsec)
+    {
+    	Sigfunc	*sigfunc;
+    	int		n;
+    
+    	sigfunc = Signal(SIGALRM, connect_alarm);
+    	if (alarm(nsec) != 0)
+    		err_msg("connect_timeo: alarm was already set");
+    
+    	if ( (n = connect(sockfd, saptr, salen)) < 0) {
+    		close(sockfd);
+    		if (errno == EINTR)
+    			errno = ETIMEDOUT;
+    	}
+    	alarm(0);					/* turn off the alarm */
+    	Signal(SIGALRM, sigfunc);	/* restore previous signal handler */
+    
+    	return(n);
+    }
+    
+    static void
+    connect_alarm(int signo)
+    {
+    	return;		/* just interrupt the connect() */
+    }
+    /* end connect_timeo */
+    
+    void
+    Connect_timeo(int fd, const SA *sa, socklen_t salen, int sec)
+    {
+    	if (connect_timeo(fd, sa, salen, sec) < 0)
+    		err_sys("connect_timeo error");
+    }
+    ```
+
+  - 使用了系统调用的可中断能力
+
+  - 在多线程化程序中正确使用信号非常困难
+
+- 使用SIGALRM为recvfrom设置超时
+
+  - ```c++
+    #include	"unp.h"
+    
+    static void	sig_alrm(int);
+    
+    void
+    dg_cli(FILE *fp, int sockfd, const SA *pservaddr, socklen_t servlen)
+    {
+    	int	n;
+    	char	sendline[MAXLINE], recvline[MAXLINE + 1];
+    
+    	Signal(SIGALRM, sig_alrm);
+    
+    	while (Fgets(sendline, MAXLINE, fp) != NULL) {
+    
+    		Sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+    
+    		alarm(5);
+    		if ( (n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL)) < 0) {
+    			if (errno == EINTR)
+    				fprintf(stderr, "socket timeout\n");
+    			else
+    				err_sys("recvfrom error");
+    		} else {
+    			alarm(0);
+    			recvline[n] = 0;	/* null terminate */
+    			Fputs(recvline, stdout);
+    		}
+    	}
+    }
+    
+    static void
+    sig_alrm(int signo)
+    {
+    	return;			/* just interrupt the recvfrom() */
+    }
+    ```
+
+- 使用select为recvfrom设置超时
+
+  - ```c++
+    /* include readable_timeo */
+    #include	"unp.h"
+    
+    int
+    readable_timeo(int fd, int sec)
+    {
+    	fd_set			rset;
+    	struct timeval	tv;
+    
+    	FD_ZERO(&rset);
+    	FD_SET(fd, &rset);
+    
+    	tv.tv_sec = sec;
+    	tv.tv_usec = 0;
+    
+    	return(select(fd+1, &rset, NULL, NULL, &tv));
+    		/* 4> 0 if descriptor is readable */
+    }
+    /* end readable_timeo */
+    
+    int
+    Readable_timeo(int fd, int sec)
+    {
+    	int		n;
+    
+    	if ( (n = readable_timeo(fd, sec)) < 0)
+    		err_sys("readable_timeo error");
+    	return(n);
+    }
+    
+    #include	"unp.h"
+    
+    void
+    dg_cli(FILE *fp, int sockfd, const SA *pservaddr, socklen_t servlen)
+    {
+    	int	n;
+    	char	sendline[MAXLINE], recvline[MAXLINE + 1];
+    
+    	while (Fgets(sendline, MAXLINE, fp) != NULL) {
+    
+    		Sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+    
+    		if (Readable_timeo(sockfd, 5) == 0) {
+    			fprintf(stderr, "socket timeout\n");
+    		} else {
+    			n = Recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL);
+    			recvline[n] = 0;	/* null terminate */
+    			Fputs(recvline, stdout);
+    		}
+    	}
+    }
+    ```
+
+- 使用SO_RCVTIMEO套接字选项为recvfrom设置超时
+
+  - 本选项一旦设置到某个描述符上，其超时设置将应用于该描述符上的所有读操作
+
+  - SO_SNDTIMEO选项仅仅应用于写操作
+
+  - 都不能为connect设置超时
+
+  - ```c++
+    #include	"unp.h"
+    
+    void
+    dg_cli(FILE *fp, int sockfd, const SA *pservaddr, socklen_t servlen)
+    {
+    	int				n;
+    	char			sendline[MAXLINE], recvline[MAXLINE + 1];
+    	struct timeval	tv;
+    
+    	tv.tv_sec = 5;
+    	tv.tv_usec = 0;
+    	Setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    
+    	while (Fgets(sendline, MAXLINE, fp) != NULL) {
+    
+    		Sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+    
+    		n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL);
+    		if (n < 0) {
+    			if (errno == EWOULDBLOCK) {
+    				fprintf(stderr, "socket timeout\n");
+    				continue;
+    			} else
+    				err_sys("recvfrom error");
+    		}
+    
+    		recvline[n] = 0;	/* null terminate */
+    		Fputs(recvline, stdout);
+    	}
+    }
+    ```
+
+### 14.3 recv和send函数
+
+- 类似于标准的read和write函数，不过需要一个额外的参数
+- flags参数
+  - MSG_DONTROUTE
+  - MSG_DONTWAIT,在无需打开相应套接字的非阻塞标志的前提下，把单个I/O操作临时指定为非阻塞
+  - MSG_OOB  发送或接收带外数据，TCP连接上只有一个字节可以作为带外数据发送
+  - MSG_PEEK 
+  - MSG_WAITALL 告知内核不要在尚未读入请求数目的字节之前让一个读操作返回
+
+### 14.4 readv和writev函数
+
+- 类似于read和write,不过readv和writev允许单个系统调用读入或写出自一个或多个缓冲区
+- writev是一个原子操作，对于一个基于记录的协议(如UDP),一次writev调用只产生单个UDP数据报
+
+### 14.5 recvmsg和sendmsg函数
+
+- 最通用的I/O函数，可以把所有read readv recv和recvfrom调用替换成recvmsg,各种输出函数调用也可以替换成sendmsg
+- 这两个函数把大部分参数封装到一个msghdr结构中
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 14-58-13.png)
+  - msg_name和msg_namelen用于套接字未连接的场合
+  - msg_iov和msg_iovlen指定输入或输出缓冲区数组
+  - msg_control和msg_controllen指定可选的辅助数据的位置和大小
+  - 只有recvfrom使用msg_flags
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 15-05-59.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 15-11-46.png)
+
+- 5组I/O函数的比较
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 15-16-01.png)
+
+### 14.6 辅助数据
+
+- 控制信息
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 15-17-27.png)
+
+- ```c++
+  struct cmsghdr{
+      socklen_t cmsg_len;
+      int cmsg_level;
+      int cmsg_level;
+      /*unsigned char cmsg_data[] */
+  };
+  ```
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 15-20-30.png)
+
+- 由recvmsg返回的辅助数据可含有任意数目的辅助数据对象，为了对应用程序屏蔽可能出现的填充字节，定义了5个宏
+- CMSG_FIRSHDR
+- CMSG_NXTHDR
+- CMSG_DATA
+- CMSG_LEN
+- CMSG_SPACE
+
+### 14.7 排队的数据量
+
+- 使用非阻塞式I/O
+- 使用MSG_PEEK标志，结合MSG_DONTWAIT使用
+- 使用ioctl的FIONREAD命令，该命令的第三个参数，内核通过该参数返回的值就是套接字接收队列的当前字节数
+
+### 14.8 套接字和标准I/O
+
+- Unix I/O,内核系统调用，围绕描述符工作
+
+- 标准I/O函数库可用于套接字，注意以下几点
+
+  - fdopen, fileno
+
+  - 为一个给定套接字打开两个标准I/O流: 一个用于读，一个用于写
+
+  - ```c++
+    #include	"unp.h"
+    
+    void
+    str_echo(int sockfd)
+    {
+    	char		line[MAXLINE];
+    	FILE		*fpin, *fpout;
+    
+    	fpin = Fdopen(sockfd, "r");
+    	fpout = Fdopen(sockfd, "w");
+    
+    	while (Fgets(line, MAXLINE, fpin) != NULL)
+    		Fputs(line, fpout);
+    }
+    ```
+
+  - 服务器的标准I/O流被标准I/O函数库完全缓冲，意味着该函数库把回射行复制到输出流的标准I/O缓冲区，但是不把该缓冲区中的内容写到描述符，因为该缓冲区未满
+
+  - 标准I/O函数库执行以下缓冲
+
+    - 完全缓冲: 以下情况才发生I/O
+    - 行缓冲
+    - 不缓冲
+
+  - 尽量避免在套接字上使用标准I/O函数库
+
+### 14.9 高级轮询技术
+
+- /dev/poll接口
+
+  - ```c++
+    #include	"unp.h"
+    #include	<sys/devpoll.h>
+    
+    void
+    str_cli(FILE *fp, int sockfd)
+    {
+    	int		stdineof;
+    	char		buf[MAXLINE];
+    	int		n;
+    	int		wfd;
+    	struct pollfd	pollfd[2];
+    	struct dvpoll	dopoll;
+    	int		i;
+    	int		result;
+    
+    	wfd = Open("/dev/poll", O_RDWR, 0);
+    
+    	pollfd[0].fd = fileno(fp);
+    	pollfd[0].events = POLLIN;
+    	pollfd[0].revents = 0;
+    
+    	pollfd[1].fd = sockfd;
+    	pollfd[1].events = POLLIN;
+    	pollfd[1].revents = 0;
+    
+    	Write(wfd, pollfd, sizeof(struct pollfd) * 2);
+    
+    	stdineof = 0;
+    	for ( ; ; ) {
+    		/* block until /dev/poll says something is ready */
+    		dopoll.dp_timeout = -1;
+    		dopoll.dp_nfds = 2;
+    		dopoll.dp_fds = pollfd;
+    		result = Ioctl(wfd, DP_POLL, &dopoll);
+    
+    		/* loop through ready file descriptors */
+    		for (i = 0; i < result; i++) {
+    			if (dopoll.dp_fds[i].fd == sockfd) {
+    				/* socket is readable */
+    				if ( (n = Read(sockfd, buf, MAXLINE)) == 0) {
+    					if (stdineof == 1)
+    						return;		/* normal termination */
+    					else
+    						err_quit("str_cli: server terminated prematurely");
+    				}
+    
+    				Write(fileno(stdout), buf, n);
+    			} else {
+    				/* input is readable */
+    				if ( (n = Read(fileno(fp), buf, MAXLINE)) == 0) {
+    					stdineof = 1;
+    					Shutdown(sockfd, SHUT_WR);	/* send FIN */
+    					continue;
+    				}
+    
+    				Writen(sockfd, buf, n);
+    			}
+    		}
+    	}
+    }
+    ```
+
+- kqueue接口
+
+  - 本接口允许进程向内核注册描述所关注kqueue事件的事件过滤器
+  - kqueue
+  - kevent
+  - EV_SET
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 16-31-57.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 16-32-19.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 16-32-37.png)
+
+  - ```c++
+    #include	"unp.h"
+    
+    void
+    str_cli(FILE *fp, int sockfd)
+    {
+    	int				kq, i, n, nev, stdineof = 0, isfile;
+    	char			buf[MAXLINE];
+    	struct kevent	kev[2];
+    	struct timespec	ts;
+    	struct stat		st;
+    
+    	isfile = ((fstat(fileno(fp), &st) == 0) &&
+    			  (st.st_mode & S_IFMT) == S_IFREG);
+    
+    	EV_SET(&kev[0], fileno(fp), EVFILT_READ, EV_ADD, 0, 0, NULL);
+    	EV_SET(&kev[1], sockfd, EVFILT_READ, EV_ADD, 0, 0, NULL);
+    
+    	kq = Kqueue();
+    	ts.tv_sec = ts.tv_nsec = 0;
+    	Kevent(kq, kev, 2, NULL, 0, &ts);
+    
+    	for ( ; ; ) {
+    		nev = Kevent(kq, NULL, 0, kev, 2, NULL);
+    
+    		for (i = 0; i < nev; i++) {
+    			if (kev[i].ident == sockfd) {	/* socket is readable */
+    				if ( (n = Read(sockfd, buf, MAXLINE)) == 0) {
+    					if (stdineof == 1)
+    						return;		/* normal termination */
+    					else
+    						err_quit("str_cli: server terminated prematurely");
+    				}
+    
+    				Write(fileno(stdout), buf, n);
+    			}
+    
+    			if (kev[i].ident == fileno(fp)) {  /* input is readable */
+    				n = Read(fileno(fp), buf, MAXLINE);
+    				if (n > 0)
+    					Writen(sockfd, buf, n);
+    
+    				if (n == 0 || (isfile && n == kev[i].data)) {
+    					stdineof = 1;
+    					Shutdown(sockfd, SHUT_WR);	/* send FIN */
+    					kev[i].flags = EV_DELETE;
+    					Kevent(kq, &kev[i], 1, NULL, 0, &ts);	/* remove kevent */
+    					continue;
+    				}
+    			}
+    		}
+    	}
+    }
+    ```
+
+### 14.10 T/TCP: 事物目的TCP
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 16-45-34.png)
+
+## 第15章　Unix域协议
+
+- 在单个主机上执行客户/服务器通信的一种方法
+- 提供两类套接字: 字节流套接字　数据报套接字
+- Unix域中用于标识客户和服务器的协议地址是普通文件系统中的路径名
+
+### 15.2 Unix域套接字地址结构
+
+- ```c++
+  struct sockaddr_un{
+      sa_family sun_family;
+      char sun_path[104];
+  };
+  ```
+
+- POSIX把AF_UNIX变为AF_LOCAL
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int					sockfd;
+  	socklen_t			len;
+  	struct sockaddr_un	addr1, addr2;
+  
+  	if (argc != 2)
+  		err_quit("usage: unixbind <pathname>");
+  
+  	sockfd = Socket(AF_LOCAL, SOCK_STREAM, 0);
+  
+  	unlink(argv[1]);		/* OK if this fails */
+  
+  	bzero(&addr1, sizeof(addr1));
+  	addr1.sun_family = AF_LOCAL;
+  	strncpy(addr1.sun_path, argv[1], sizeof(addr1.sun_path)-1);
+  	Bind(sockfd, (SA *) &addr1, SUN_LEN(&addr1));
+  
+  	len = sizeof(addr2);
+  	Getsockname(sockfd, (SA *) &addr2, &len);
+  	printf("bound name = %s, returned len = %d\n", addr2.sun_path, len);
+  	
+  	exit(0);
+  }
+  ```
+
+- 路径名的文件类型为显示为s的套接字
+
+### 15.3 socketpair函数
+
+- 创建两个随后连接起来的套接字，仅适用于Unix域套接字
+- 全双工管道
+
+### 15.4 套接字函数
+
+- 由bind创建的路径名默认访问权限应为0777
+- 与Unix域套接字关联的路径名应该是一个绝对路径名
+- Unix域字节流套接字类似于TCP套接字，为进程提供一个无记录边界的字节流接口
+- 在一个未绑定的Unix域套接字上发送数据报不会自动给这个套接字捆绑一个路径名
+
+### 15.5 Unix域字节流客户/服务器程序
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int					listenfd, connfd;
+  	pid_t				childpid;
+  	socklen_t			clilen;
+  	struct sockaddr_un	cliaddr, servaddr;
+  	void				sig_chld(int);
+  
+  	listenfd = Socket(AF_LOCAL, SOCK_STREAM, 0);
+  
+  	unlink(UNIXSTR_PATH);
+  	bzero(&servaddr, sizeof(servaddr));
+  	servaddr.sun_family = AF_LOCAL;
+  	strcpy(servaddr.sun_path, UNIXSTR_PATH);
+  
+  	Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
+  
+  	Listen(listenfd, LISTENQ);
+  
+  	Signal(SIGCHLD, sig_chld);
+  
+  	for ( ; ; ) {
+  		clilen = sizeof(cliaddr);
+  		if ( (connfd = accept(listenfd, (SA *) &cliaddr, &clilen)) < 0) {
+  			if (errno == EINTR)
+  				continue;		/* back to for() */
+  			else
+  				err_sys("accept error");
+  		}
+  
+  		if ( (childpid = Fork()) == 0) {	/* child process */
+  			Close(listenfd);	/* close listening socket */
+  			str_echo(connfd);	/* process request */
+  			exit(0);
+  		}
+  		Close(connfd);			/* parent closes connected socket */
+  	}
+  }
+  ```
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int					sockfd;
+  	struct sockaddr_un	servaddr;
+  
+  	sockfd = Socket(AF_LOCAL, SOCK_STREAM, 0);
+  
+  	bzero(&servaddr, sizeof(servaddr));
+  	servaddr.sun_family = AF_LOCAL;
+  	strcpy(servaddr.sun_path, UNIXSTR_PATH);
+  
+  	Connect(sockfd, (SA *) &servaddr, sizeof(servaddr));
+  
+  	str_cli(stdin, sockfd);		/* do it all */
+  
+  	exit(0);
+  }
+  ```
+
+### 15.6 Unix域数据报客户/服务器程序
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int					sockfd;
+  	struct sockaddr_un	servaddr, cliaddr;
+  
+  	sockfd = Socket(AF_LOCAL, SOCK_DGRAM, 0);
+  
+  	unlink(UNIXDG_PATH);
+  	bzero(&servaddr, sizeof(servaddr));
+  	servaddr.sun_family = AF_LOCAL;
+  	strcpy(servaddr.sun_path, UNIXDG_PATH);
+  
+  	Bind(sockfd, (SA *) &servaddr, sizeof(servaddr));
+  
+  	dg_echo(sockfd, (SA *) &cliaddr, sizeof(cliaddr));
+  }
+  ```
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int					sockfd;
+  	struct sockaddr_un	cliaddr, servaddr;
+  
+  	sockfd = Socket(AF_LOCAL, SOCK_DGRAM, 0);
+  
+  	bzero(&cliaddr, sizeof(cliaddr));		/* bind an address for us */
+  	cliaddr.sun_family = AF_LOCAL;
+  	strcpy(cliaddr.sun_path, tmpnam(NULL));
+  
+  	Bind(sockfd, (SA *) &cliaddr, sizeof(cliaddr));
+  
+  	bzero(&servaddr, sizeof(servaddr));	/* fill in server's address */
+  	servaddr.sun_family = AF_LOCAL;
+  	strcpy(servaddr.sun_path, UNIXDG_PATH);
+  
+  	dg_cli(stdin, sockfd, (SA *) &servaddr, sizeof(servaddr));
+  
+  	exit(0);
+  }
+  ```
+
+### 15.7 描述符传递
+
+- 首先在这两个进程之间创建一个Unix域套接字，然后使用sendmsg跨这个套接字发送一个特殊消息
+
+- 步骤如下
+
+  - 创建一个字节流的或数据报的Unix域套接字
+  - 发送进程通过调用返回描述符的任一Unix函数打开一个描述符
+  - 发送进程创建一个msghdr结构，其中含有待传递的描述符，发送一个描述符会使该描述符的引用计数加1
+  - 接收进程调用recvmsg在来自步骤1的Unix域套接字上接收这个描述符
+
+- 通过执行另一个程序来打开文件的优势在于。另一个程序可以是一个setuid到root的程序，能够打开我们通常没有打开权限的文件
+
+- ```c++``
+  #include	"unp.h"
+
+  int
+  my_open(const char *pathname, int mode)
+  {
+  	int			fd, sockfd[2], status;
+  	pid_t		childpid;
+  	char		c, argsockfd[10], argmode[10];
+
+  	Socketpair(AF_LOCAL, SOCK_STREAM, 0, sockfd);
+  	
+  	if ( (childpid = Fork()) == 0) {		/* child process */
+  		Close(sockfd[0]);
+  		snprintf(argsockfd, sizeof(argsockfd), "%d", sockfd[1]);
+  		snprintf(argmode, sizeof(argmode), "%d", mode);
+  		execl("./openfile", "openfile", argsockfd, pathname, argmode,
+  			  (char *) NULL);
+  		err_sys("execl error");
+  	}
+  	
+  	/* parent process - wait for the child to terminate */
+  	Close(sockfd[1]);			/* close the end we don't use */
+  	
+  	Waitpid(childpid, &status, 0);
+  	if (WIFEXITED(status) == 0)
+  		err_quit("child did not terminate");
+  	if ( (status = WEXITSTATUS(status)) == 0)
+  		Read_fd(sockfd[0], &c, 1, &fd);
+  	else {
+  		errno = status;		/* set errno value from child's status */
+  		fd = -1;
+  	}
+  	
+  	Close(sockfd[0]);
+  	return(fd);
+  }
+
+  ```
+  
+  ```
+
+- ```c++
+  /* include read_fd */
+  #include	"unp.h"
+  
+  ssize_t
+  read_fd(int fd, void *ptr, size_t nbytes, int *recvfd)
+  {
+  	struct msghdr	msg;
+  	struct iovec	iov[1];
+  	ssize_t			n;
+  
+  #ifdef	HAVE_MSGHDR_MSG_CONTROL
+  	union {
+  	  struct cmsghdr	cm;
+  	  char				control[CMSG_SPACE(sizeof(int))];
+  	} control_un;
+  	struct cmsghdr	*cmptr;
+  
+  	msg.msg_control = control_un.control;
+  	msg.msg_controllen = sizeof(control_un.control);
+  #else
+  	int				newfd;
+  
+  	msg.msg_accrights = (caddr_t) &newfd;
+  	msg.msg_accrightslen = sizeof(int);
+  #endif
+  
+  	msg.msg_name = NULL;
+  	msg.msg_namelen = 0;
+  
+  	iov[0].iov_base = ptr;
+  	iov[0].iov_len = nbytes;
+  	msg.msg_iov = iov;
+  	msg.msg_iovlen = 1;
+  
+  	if ( (n = recvmsg(fd, &msg, 0)) <= 0)
+  		return(n);
+  
+  #ifdef	HAVE_MSGHDR_MSG_CONTROL
+  	if ( (cmptr = CMSG_FIRSTHDR(&msg)) != NULL &&
+  	    cmptr->cmsg_len == CMSG_LEN(sizeof(int))) {
+  		if (cmptr->cmsg_level != SOL_SOCKET)
+  			err_quit("control level != SOL_SOCKET");
+  		if (cmptr->cmsg_type != SCM_RIGHTS)
+  			err_quit("control type != SCM_RIGHTS");
+  		*recvfd = *((int *) CMSG_DATA(cmptr));
+  	} else
+  		*recvfd = -1;		/* descriptor was not passed */
+  #else
+  /* *INDENT-OFF* */
+  	if (msg.msg_accrightslen == sizeof(int))
+  		*recvfd = newfd;
+  	else
+  		*recvfd = -1;		/* descriptor was not passed */
+  /* *INDENT-ON* */
+  #endif
+  
+  	return(n);
+  }
+  /* end read_fd */
+  
+  ssize_t
+  Read_fd(int fd, void *ptr, size_t nbytes, int *recvfd)
+  {
+  	ssize_t		n;
+  
+  	if ( (n = read_fd(fd, ptr, nbytes, recvfd)) < 0)
+  		err_sys("read_fd error");
+  
+  	return(n);
+  }
+  ```
+
+- ```c++
+  /* include write_fd */
+  #include	"unp.h"
+  
+  ssize_t
+  write_fd(int fd, void *ptr, size_t nbytes, int sendfd)
+  {
+  	struct msghdr	msg;
+  	struct iovec	iov[1];
+  
+  #ifdef	HAVE_MSGHDR_MSG_CONTROL
+  	union {
+  	  struct cmsghdr	cm;
+  	  char				control[CMSG_SPACE(sizeof(int))];
+  	} control_un;
+  	struct cmsghdr	*cmptr;
+  
+  	msg.msg_control = control_un.control;
+  	msg.msg_controllen = sizeof(control_un.control);
+  
+  	cmptr = CMSG_FIRSTHDR(&msg);
+  	cmptr->cmsg_len = CMSG_LEN(sizeof(int));
+  	cmptr->cmsg_level = SOL_SOCKET;
+  	cmptr->cmsg_type = SCM_RIGHTS;
+  	*((int *) CMSG_DATA(cmptr)) = sendfd;
+  #else
+  	msg.msg_accrights = (caddr_t) &sendfd;
+  	msg.msg_accrightslen = sizeof(int);
+  #endif
+  
+  	msg.msg_name = NULL;
+  	msg.msg_namelen = 0;
+  
+  	iov[0].iov_base = ptr;
+  	iov[0].iov_len = nbytes;
+  	msg.msg_iov = iov;
+  	msg.msg_iovlen = 1;
+  
+  	return(sendmsg(fd, &msg, 0));
+  }
+  /* end write_fd */
+  
+  ssize_t
+  Write_fd(int fd, void *ptr, size_t nbytes, int sendfd)
+  {
+  	ssize_t		n;
+  
+  	if ( (n = write_fd(fd, ptr, nbytes, sendfd)) < 0)
+  		err_sys("write_fd error");
+  
+  	return(n);
+  }
+  ```
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int		fd;
+  
+  	if (argc != 4)
+  		err_quit("openfile <sockfd#> <filename> <mode>");
+  
+  	if ( (fd = open(argv[2], atoi(argv[3]))) < 0)
+  		exit( (errno > 0) ? errno : 255 );
+  
+  	if (write_fd(atoi(argv[1]), "", 1, fd) < 0)
+  		exit( (errno > 0) ? errno : 255 );
+  
+  	exit(0);
+  }
+  ```
+
+### 15.8 接收发送者的凭证
+
+- 使用cmsgcred结构传递凭证
+
+- 凭证发送进程必须提供其结构，其内容却是由内核填写的，发送进程无法伪造
+
+- ```c++
+  #include	"unp.h"
+  
+  #define	CONTROL_LEN	(sizeof(struct cmsghdr) + sizeof(struct cmsgcred))
+  
+  ssize_t
+  read_cred(int fd, void *ptr, size_t nbytes, struct cmsgcred *cmsgcredptr)
+  {
+  	struct msghdr	msg;
+  	struct iovec	iov[1];
+  	char			control[CONTROL_LEN];
+  	int				n;
+  
+  	msg.msg_name = NULL;
+  	msg.msg_namelen = 0;
+  	iov[0].iov_base = ptr;
+  	iov[0].iov_len = nbytes;
+  	msg.msg_iov = iov;
+  	msg.msg_iovlen = 1;
+  	msg.msg_control = control;
+  	msg.msg_controllen = sizeof(control);
+  	msg.msg_flags = 0;
+  
+  	if ( (n = recvmsg(fd, &msg, 0)) < 0)
+  		return(n);
+  
+  	cmsgcredptr->cmcred_ngroups = 0;	/* indicates no credentials returned */
+  	if (cmsgcredptr && msg.msg_controllen > 0) {
+  		struct cmsghdr	*cmptr = (struct cmsghdr *) control;
+  
+  		if (cmptr->cmsg_len < CONTROL_LEN)
+  			err_quit("control length = %d", cmptr->cmsg_len);
+  		if (cmptr->cmsg_level != SOL_SOCKET)
+  			err_quit("control level != SOL_SOCKET");
+  		if (cmptr->cmsg_type != SCM_CREDS)
+  			err_quit("control type != SCM_CREDS");
+  		memcpy(cmsgcredptr, CMSG_DATA(cmptr), sizeof(struct cmsgcred));
+  	}
+  
+  	return(n);
+  }
+  ```
+
+- ```c++
+  #include	"unp.h"
+  
+  ssize_t	read_cred(int, void *, size_t, struct cmsgcred *);
+  
+  void
+  str_echo(int sockfd)
+  {
+  	ssize_t			n;
+  	int			i;
+  	char			buf[MAXLINE];
+  	struct cmsgcred	cred;
+  
+  again:
+  	while ( (n = read_cred(sockfd, buf, MAXLINE, &cred)) > 0) {
+  		if (cred.cmcred_ngroups == 0) {
+  			printf("(no credentials returned)\n");
+  		} else {
+  			printf("PID of sender = %d\n", cred.cmcred_pid);
+  			printf("real user ID = %d\n", cred.cmcred_uid);
+  			printf("real group ID = %d\n", cred.cmcred_gid);
+  			printf("effective user ID = %d\n", cred.cmcred_euid);
+  			printf("%d groups:", cred.cmcred_ngroups - 1);
+  			for (i = 1; i < cred.cmcred_ngroups; i++)
+  				printf(" %d", cred.cmcred_groups[i]);
+  			printf("\n");
+  		}
+  		Writen(sockfd, buf, n);
+  	}
+  
+  	if (n < 0 && errno == EINTR)
+  		goto again;
+  	else if (n < 0)
+  		err_sys("str_echo: read error");
+  }
+  ```
+
+## 第16章　非阻塞式I/O
+
+- 可能阻塞的套接字调用
+  - 输入操作: read readv recv recvfrom recvmsg
+  - 输出操作: write writev send sendto sendmsg, 内核将从应用进程的缓冲区到该套接字的发送缓冲区复制数据
+  - 接受外来连接，即accept函数
+  - 发起外出连接，即用于TCP的connect函数
+- 对于不能被满足的非阻塞式I/O操作，返回EAGAIN错误或EWOULDBLOCK错误
+
+### 16.2 非阻塞读和写: str_cli函数
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-12 14-36-05.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-12 14-36-31.png)
+
+- ```c++
+  /* include nonb1 */
+  #include	"unp.h"
+  
+  void
+  str_cli(FILE *fp, int sockfd)
+  {
+  	int			maxfdp1, val, stdineof;
+  	ssize_t		n, nwritten;
+  	fd_set		rset, wset;
+  	char		to[MAXLINE], fr[MAXLINE];
+  	char		*toiptr, *tooptr, *friptr, *froptr;
+  
+  	val = Fcntl(sockfd, F_GETFL, 0);
+  	Fcntl(sockfd, F_SETFL, val | O_NONBLOCK);
+  
+  	val = Fcntl(STDIN_FILENO, F_GETFL, 0);
+  	Fcntl(STDIN_FILENO, F_SETFL, val | O_NONBLOCK);
+  
+  	val = Fcntl(STDOUT_FILENO, F_GETFL, 0);
+  	Fcntl(STDOUT_FILENO, F_SETFL, val | O_NONBLOCK);
+  
+  	toiptr = tooptr = to;	/* initialize buffer pointers */
+  	friptr = froptr = fr;
+  	stdineof = 0;
+  
+  	maxfdp1 = max(max(STDIN_FILENO, STDOUT_FILENO), sockfd) + 1;
+  	for ( ; ; ) {
+  		FD_ZERO(&rset);
+  		FD_ZERO(&wset);
+  		if (stdineof == 0 && toiptr < &to[MAXLINE])
+  			FD_SET(STDIN_FILENO, &rset);	/* read from stdin */
+  		if (friptr < &fr[MAXLINE])
+  			FD_SET(sockfd, &rset);			/* read from socket */
+  		if (tooptr != toiptr)
+  			FD_SET(sockfd, &wset);			/* data to write to socket */
+  		if (froptr != friptr)
+  			FD_SET(STDOUT_FILENO, &wset);	/* data to write to stdout */
+  
+  		Select(maxfdp1, &rset, &wset, NULL, NULL);
+  /* end nonb1 */
+  /* include nonb2 */
+  		if (FD_ISSET(STDIN_FILENO, &rset)) {
+  			if ( (n = read(STDIN_FILENO, toiptr, &to[MAXLINE] - toiptr)) < 0) {
+  				if (errno != EWOULDBLOCK)
+  					err_sys("read error on stdin");
+  
+  			} else if (n == 0) {
+  #ifdef	VOL2
+  				fprintf(stderr, "%s: EOF on stdin\n", gf_time());
+  #endif
+  				stdineof = 1;			/* all done with stdin */
+  				if (tooptr == toiptr)
+  					Shutdown(sockfd, SHUT_WR);/* send FIN */
+  
+  			} else {
+  #ifdef	VOL2
+  				fprintf(stderr, "%s: read %d bytes from stdin\n", gf_time(), n);
+  #endif
+  				toiptr += n;			/* # just read */
+  				FD_SET(sockfd, &wset);	/* try and write to socket below */
+  			}
+  		}
+  
+  		if (FD_ISSET(sockfd, &rset)) {
+  			if ( (n = read(sockfd, friptr, &fr[MAXLINE] - friptr)) < 0) {
+  				if (errno != EWOULDBLOCK)
+  					err_sys("read error on socket");
+  
+  			} else if (n == 0) {
+  #ifdef	VOL2
+  				fprintf(stderr, "%s: EOF on socket\n", gf_time());
+  #endif
+  				if (stdineof)
+  					return;		/* normal termination */
+  				else
+  					err_quit("str_cli: server terminated prematurely");
+  
+  			} else {
+  #ifdef	VOL2
+  				fprintf(stderr, "%s: read %d bytes from socket\n",
+  								gf_time(), n);
+  #endif
+  				friptr += n;		/* # just read */
+  				FD_SET(STDOUT_FILENO, &wset);	/* try and write below */
+  			}
+  		}
+  /* end nonb2 */
+  /* include nonb3 */
+  		if (FD_ISSET(STDOUT_FILENO, &wset) && ( (n = friptr - froptr) > 0)) {
+  			if ( (nwritten = write(STDOUT_FILENO, froptr, n)) < 0) {
+  				if (errno != EWOULDBLOCK)
+  					err_sys("write error to stdout");
+  
+  			} else {
+  #ifdef	VOL2
+  				fprintf(stderr, "%s: wrote %d bytes to stdout\n",
+  								gf_time(), nwritten);
+  #endif
+  				froptr += nwritten;		/* # just written */
+  				if (froptr == friptr)
+  					froptr = friptr = fr;	/* back to beginning of buffer */
+  			}
+  		}
+  
+  		if (FD_ISSET(sockfd, &wset) && ( (n = toiptr - tooptr) > 0)) {
+  			if ( (nwritten = write(sockfd, tooptr, n)) < 0) {
+  				if (errno != EWOULDBLOCK)
+  					err_sys("write error to socket");
+  
+  			} else {
+  #ifdef	VOL2
+  				fprintf(stderr, "%s: wrote %d bytes to socket\n",
+  								gf_time(), nwritten);
+  #endif
+  				tooptr += nwritten;	/* # just written */
+  				if (tooptr == toiptr) {
+  					toiptr = tooptr = to;	/* back to beginning of buffer */
+  					if (stdineof)
+  						Shutdown(sockfd, SHUT_WR);	/* send FIN */
+  				}
+  			}
+  		}
+  	}
+  }
+  /* end nonb3 */
+  ```
+
+- ```c++
+  #include	"unp.h"
+  #include	<time.h>
+  
+  char *
+  gf_time(void)
+  {
+  	struct timeval	tv;
+  	time_t			t;
+  	static char		str[30];
+  	char			*ptr;
+  
+  	if (gettimeofday(&tv, NULL) < 0)
+  		err_sys("gettimeofday error");
+  
+  	t = tv.tv_sec;	/* POSIX says tv.tv_sec is time_t; some BSDs don't agree. */
+  	ptr = ctime(&t);
+  	strcpy(str, &ptr[11]);
+  		/* Fri Sep 13 00:00:00 1986\n\0 */
+  		/* 0123456789012345678901234 5  */
+  	snprintf(str+8, sizeof(str)-8, ".%06ld", tv.tv_usec);
+  
+  	return(str);
+  }
+  ```
+
+- tcpdump -w tcpd tcp and port 7 指定捕获只去往或来自端口7的TCP分节，程序输出到在名为tcpd的文件名中
+
+- str_cli的较简单版本
+
+- str_cli执行时间
+
+  - 停等版本
+  - select加阻塞式I/O版本
+  - 非阻塞式I/O版本
+  - fork版本
+  - 线程化版本
+
+### 16.3 非阻塞connect
+
+- 当在一个非阻塞的TCP套接字上调用connect时，connect将立即返回一个EINPROGRESS,错误，不过已经发起的TCP三路握手继续进行，接着使用select检测这个连接或成功或失败的已建立条件
+- 尽管套接字是非阻塞的，如果连接到的服务器在同一个主机上，那么当我们调用connect时，连接通常立刻建立
+- 当连接成功建立时，描述符变为可写。当连接建立遇到错误时，描述符变为既可读又可写
+
+### 16.4 非阻塞connect: 时间获取服务器
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  connect_nonb(int sockfd, const SA *saptr, socklen_t salen, int nsec)
+  {
+  	int				flags, n, error;
+  	socklen_t		len;
+  	fd_set			rset, wset;
+  	struct timeval	tval;
+  
+  	flags = Fcntl(sockfd, F_GETFL, 0);
+  	Fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+  
+  	error = 0;
+  	if ( (n = connect(sockfd, saptr, salen)) < 0)
+  		if (errno != EINPROGRESS)
+  			return(-1);
+  
+  	/* Do whatever we want while the connect is taking place. */
+  
+  	if (n == 0)
+  		goto done;	/* connect completed immediately */
+  
+  	FD_ZERO(&rset);
+  	FD_SET(sockfd, &rset);
+  	wset = rset;
+  	tval.tv_sec = nsec;
+  	tval.tv_usec = 0;
+  
+  	if ( (n = Select(sockfd+1, &rset, &wset, NULL,
+  					 nsec ? &tval : NULL)) == 0) {
+  		close(sockfd);		/* timeout */
+  		errno = ETIMEDOUT;
+  		return(-1);
+  	}
+  
+  	if (FD_ISSET(sockfd, &rset) || FD_ISSET(sockfd, &wset)) {
+  		len = sizeof(error);
+  		if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) < 0)
+  			return(-1);			/* Solaris pending error */
+  	} else
+  		err_quit("select error: sockfd not set");
+  
+  done:
+  	Fcntl(sockfd, F_SETFL, flags);	/* restore file status flags */
+  
+  	if (error) {
+  		close(sockfd);		/* just in case */
+  		errno = error;
+  		return(-1);
+  	}
+  	return(0);
+  }
+  ```
+
+- 非阻塞connect是网络编程中最不易移植的部分。避免移植性问题的一个较简单技术是为每个连接创建一个处理线程
+
+- 被中断的connect
+
+  - 如果被中断的connect调用不由内核自动重启，那么它将返回EINTR,不能再次调用connect等待未完成的连接继续完成，这样做将导致返回EADDRINUSE错误。
+  - 这种情形下只能调用select,像对于非阻塞connect所做的那样，连接建立成功时select返回套接字可写条件，连接建立失败时select返回套接字既可读又可写条件
+
+### 16.5 非阻塞connect:Web客户程序
+
+- 同时处理多个非阻塞connect
+- 一个流行的Web应用程序即Netscape浏览器使用的特性之一
+- 同时打开多个TCP连接以减少从单个服务器取得多个文件所需时钟时间的Web客户程序，但考虑到TCP的拥塞避免机制，它是对网络不利的
+
+### 16.6 非阻塞accept
+
+![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-12 17-14-57.png)
+
+- 当使用select获悉某个监听套接字上何时有已完成连接准备好被accept时，总是把这个监听套接字设置为非阻塞
+- 在后续的accept调用中忽略以下错误: EWOULDBLOCK 等
+
+## 第17章　ioctl操作
+
+- ioctl函数传统上一直作为那些不适合归入其他精细定义类别的特性的系统接口
+- 网络程序通常在程序启动执行后使用ioctl获取所在主机全部网络接口的信息，包括: 接口地址、是否支持广播、是否支持多播，等
+
+### 17.2 ioctl函数
+
+- 影响由　fd参数引用的一个打开的文件
+- request可分为6类
+  - 套接字操作
+  - 文件操作
+  - 接口操作
+  - ARP高速缓存操作
+  - 路由表操作
+  - 流系统
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 10-24-09.png)
+
+### 17.3 套接字操作
+
+- SIOCATMARK 如果本套接字的读指针当前位于带外标记，则通过第三个参数返回一个非0值
+- SIOCGPGRP 返回本套接字的进程ID或进程组ID
+- SIOCSPGRP　把本套接字的进程ID或进程组ID设置为...
+
+### 17.4 文件操作
+
+- FIONBIO 可清除或设置本套接字的非阻塞式I/O标志
+- FIOASYNC 可清除或设置针对本套接字的信号驱动异步I/O标志
+- FIONREAD  返回本套接字接收缓冲区中的字节数
+- FIOSETOWN
+- FIOGETOWN
+
+### 17.5 接口配置
+
+- 从内核获取配置在系统中的所有接口，由SIOCGIFCONF请求完成，使用ifconf结构，ifconf又使用ifreq结构
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 10-51-52.png)
+
+### 17.6 get_ifi_info函数
+
+- 返回一个结构链表，其中每个结构对应一个当前处于在工状态的接口
+
+- ```c++
+  /* Our own header for the programs that need interface configuration info.
+     Include this file, instead of "unp.h". */
+  
+  #ifndef	__unp_ifi_h
+  #define	__unp_ifi_h
+  
+  #include	"unp.h"
+  #include	<net/if.h>
+  
+  #define	IFI_NAME	16			/* same as IFNAMSIZ in <net/if.h> */
+  #define	IFI_HADDR	 8			/* allow for 64-bit EUI-64 in future */
+  
+  struct ifi_info {
+    char    ifi_name[IFI_NAME];	/* interface name, null-terminated */
+    short   ifi_index;			/* interface index */
+    short   ifi_mtu;				/* interface MTU */
+    u_char  ifi_haddr[IFI_HADDR];	/* hardware address */
+    u_short ifi_hlen;				/* # bytes in hardware address: 0, 6, 8 */
+    short   ifi_flags;			/* IFF_xxx constants from <net/if.h> */
+    short   ifi_myflags;			/* our own IFI_xxx flags */
+    struct sockaddr  *ifi_addr;	/* primary address */
+    struct sockaddr  *ifi_brdaddr;/* broadcast address */
+    struct sockaddr  *ifi_dstaddr;/* destination address */
+    struct ifi_info  *ifi_next;	/* next of these structures */
+  };
+  
+  #define	IFI_ALIAS	1			/* ifi_addr is an alias */
+  
+  					/* function prototypes */
+  struct ifi_info	*get_ifi_info(int, int);
+  struct ifi_info	*Get_ifi_info(int, int);
+  void			 free_ifi_info(struct ifi_info *);
+  
+  #endif	/* __unp_ifi_h */
+  ```
+
+- ```c++
+  #include	"unpifi.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	struct ifi_info	*ifi, *ifihead;
+  	struct sockaddr	*sa;
+  	u_char			*ptr;
+  	int				i, family, doaliases;
+  
+  	if (argc != 3)
+  		err_quit("usage: prifinfo <inet4|inet6> <doaliases>");
+  
+  	if (strcmp(argv[1], "inet4") == 0)
+  		family = AF_INET;
+  #ifdef	IPv6
+  	else if (strcmp(argv[1], "inet6") == 0)
+  		family = AF_INET6;
+  #endif
+  	else
+  		err_quit("invalid <address-family>");
+  	doaliases = atoi(argv[2]);
+  
+  	for (ifihead = ifi = Get_ifi_info(family, doaliases);
+  		 ifi != NULL; ifi = ifi->ifi_next) {
+  		printf("%s: ", ifi->ifi_name);
+  		if (ifi->ifi_index != 0)
+  			printf("(%d) ", ifi->ifi_index);
+  		printf("<");
+  /* *INDENT-OFF* */
+  		if (ifi->ifi_flags & IFF_UP)			printf("UP ");
+  		if (ifi->ifi_flags & IFF_BROADCAST)		printf("BCAST ");
+  		if (ifi->ifi_flags & IFF_MULTICAST)		printf("MCAST ");
+  		if (ifi->ifi_flags & IFF_LOOPBACK)		printf("LOOP ");
+  		if (ifi->ifi_flags & IFF_POINTOPOINT)	printf("P2P ");
+  		printf(">\n");
+  /* *INDENT-ON* */
+  
+  		if ( (i = ifi->ifi_hlen) > 0) {
+  			ptr = ifi->ifi_haddr;
+  			do {
+  				printf("%s%x", (i == ifi->ifi_hlen) ? "  " : ":", *ptr++);
+  			} while (--i > 0);
+  			printf("\n");
+  		}
+  		if (ifi->ifi_mtu != 0)
+  			printf("  MTU: %d\n", ifi->ifi_mtu);
+  
+  		if ( (sa = ifi->ifi_addr) != NULL)
+  			printf("  IP addr: %s\n",
+  						Sock_ntop_host(sa, sizeof(*sa)));
+  		if ( (sa = ifi->ifi_brdaddr) != NULL)
+  			printf("  broadcast addr: %s\n",
+  						Sock_ntop_host(sa, sizeof(*sa)));
+  		if ( (sa = ifi->ifi_dstaddr) != NULL)
+  			printf("  destination addr: %s\n",
+  						Sock_ntop_host(sa, sizeof(*sa)));
+  	}
+  	free_ifi_info(ifihead);
+  	exit(0);
+  }
+  ```
+
+- SIOCGIFCONF存在的问题: 在缓冲区的大小不足以存放结果时，一些实现不返回错误，而是截断结果并返回成功
+
+- ```c++
+  /* include get_ifi_info1 */
+  #include	"unpifi.h"
+  
+  struct ifi_info *
+  get_ifi_info(int family, int doaliases)
+  {
+  	struct ifi_info		*ifi, *ifihead, **ifipnext;
+  	int					sockfd, len, lastlen, flags, myflags, idx = 0, hlen = 0;
+  	char				*ptr, *buf, lastname[IFNAMSIZ], *cptr, *haddr, *sdlname;
+  	struct ifconf		ifc;
+  	struct ifreq		*ifr, ifrcopy;
+  	struct sockaddr_in	*sinptr;
+  	struct sockaddr_in6	*sin6ptr;
+  
+  	sockfd = Socket(AF_INET, SOCK_DGRAM, 0);
+  
+  	lastlen = 0;
+  	len = 100 * sizeof(struct ifreq);	/* initial buffer size guess */
+  	for ( ; ; ) {
+  		buf = Malloc(len);
+  		ifc.ifc_len = len;
+  		ifc.ifc_buf = buf;
+  		if (ioctl(sockfd, SIOCGIFCONF, &ifc) < 0) {
+  			if (errno != EINVAL || lastlen != 0)
+  				err_sys("ioctl error");
+  		} else {
+  			if (ifc.ifc_len == lastlen)
+  				break;		/* success, len has not changed */
+  			lastlen = ifc.ifc_len;
+  		}
+  		len += 10 * sizeof(struct ifreq);	/* increment */
+  		free(buf);
+  	}
+  	ifihead = NULL;
+  	ifipnext = &ifihead;
+  	lastname[0] = 0;
+  	sdlname = NULL;
+  /* end get_ifi_info1 */
+  
+  /* include get_ifi_info2 */
+  	for (ptr = buf; ptr < buf + ifc.ifc_len; ) {
+  		ifr = (struct ifreq *) ptr;
+  
+  #ifdef	HAVE_SOCKADDR_SA_LEN
+  		len = max(sizeof(struct sockaddr), ifr->ifr_addr.sa_len);
+  #else
+  		switch (ifr->ifr_addr.sa_family) {
+  #ifdef	IPV6
+  		case AF_INET6:	
+  			len = sizeof(struct sockaddr_in6);
+  			break;
+  #endif
+  		case AF_INET:	
+  		default:	
+  			len = sizeof(struct sockaddr);
+  			break;
+  		}
+  #endif	/* HAVE_SOCKADDR_SA_LEN */
+  		ptr += sizeof(ifr->ifr_name) + len;	/* for next one in buffer */
+  
+  #ifdef	HAVE_SOCKADDR_DL_STRUCT
+  		/* assumes that AF_LINK precedes AF_INET or AF_INET6 */
+  		if (ifr->ifr_addr.sa_family == AF_LINK) {
+  			struct sockaddr_dl *sdl = (struct sockaddr_dl *)&ifr->ifr_addr;
+  			sdlname = ifr->ifr_name;
+  			idx = sdl->sdl_index;
+  			haddr = sdl->sdl_data + sdl->sdl_nlen;
+  			hlen = sdl->sdl_alen;
+  		}
+  #endif
+  
+  		if (ifr->ifr_addr.sa_family != family)
+  			continue;	/* ignore if not desired address family */
+  
+  		myflags = 0;
+  		if ( (cptr = strchr(ifr->ifr_name, ':')) != NULL)
+  			*cptr = 0;		/* replace colon with null */
+  		if (strncmp(lastname, ifr->ifr_name, IFNAMSIZ) == 0) {
+  			if (doaliases == 0)
+  				continue;	/* already processed this interface */
+  			myflags = IFI_ALIAS;
+  		}
+  		memcpy(lastname, ifr->ifr_name, IFNAMSIZ);
+  
+  		ifrcopy = *ifr;
+  		Ioctl(sockfd, SIOCGIFFLAGS, &ifrcopy);
+  		flags = ifrcopy.ifr_flags;
+  		if ((flags & IFF_UP) == 0)
+  			continue;	/* ignore if interface not up */
+  /* end get_ifi_info2 */
+  
+  /* include get_ifi_info3 */
+  		ifi = Calloc(1, sizeof(struct ifi_info));
+  		*ifipnext = ifi;			/* prev points to this new one */
+  		ifipnext = &ifi->ifi_next;	/* pointer to next one goes here */
+  
+  		ifi->ifi_flags = flags;		/* IFF_xxx values */
+  		ifi->ifi_myflags = myflags;	/* IFI_xxx values */
+  #if defined(SIOCGIFMTU) && defined(HAVE_STRUCT_IFREQ_IFR_MTU)
+  		Ioctl(sockfd, SIOCGIFMTU, &ifrcopy);
+  		ifi->ifi_mtu = ifrcopy.ifr_mtu;
+  #else
+  		ifi->ifi_mtu = 0;
+  #endif
+  		memcpy(ifi->ifi_name, ifr->ifr_name, IFI_NAME);
+  		ifi->ifi_name[IFI_NAME-1] = '\0';
+  		/* If the sockaddr_dl is from a different interface, ignore it */
+  		if (sdlname == NULL || strcmp(sdlname, ifr->ifr_name) != 0)
+  			idx = hlen = 0;
+  		ifi->ifi_index = idx;
+  		ifi->ifi_hlen = hlen;
+  		if (ifi->ifi_hlen > IFI_HADDR)
+  			ifi->ifi_hlen = IFI_HADDR;
+  		if (hlen)
+  			memcpy(ifi->ifi_haddr, haddr, ifi->ifi_hlen);
+  /* end get_ifi_info3 */
+  /* include get_ifi_info4 */
+  		switch (ifr->ifr_addr.sa_family) {
+  		case AF_INET:
+  			sinptr = (struct sockaddr_in *) &ifr->ifr_addr;
+  			ifi->ifi_addr = Calloc(1, sizeof(struct sockaddr_in));
+  			memcpy(ifi->ifi_addr, sinptr, sizeof(struct sockaddr_in));
+  
+  #ifdef	SIOCGIFBRDADDR
+  			if (flags & IFF_BROADCAST) {
+  				Ioctl(sockfd, SIOCGIFBRDADDR, &ifrcopy);
+  				sinptr = (struct sockaddr_in *) &ifrcopy.ifr_broadaddr;
+  				ifi->ifi_brdaddr = Calloc(1, sizeof(struct sockaddr_in));
+  				memcpy(ifi->ifi_brdaddr, sinptr, sizeof(struct sockaddr_in));
+  			}
+  #endif
+  
+  #ifdef	SIOCGIFDSTADDR
+  			if (flags & IFF_POINTOPOINT) {
+  				Ioctl(sockfd, SIOCGIFDSTADDR, &ifrcopy);
+  				sinptr = (struct sockaddr_in *) &ifrcopy.ifr_dstaddr;
+  				ifi->ifi_dstaddr = Calloc(1, sizeof(struct sockaddr_in));
+  				memcpy(ifi->ifi_dstaddr, sinptr, sizeof(struct sockaddr_in));
+  			}
+  #endif
+  			break;
+  
+  		case AF_INET6:
+  			sin6ptr = (struct sockaddr_in6 *) &ifr->ifr_addr;
+  			ifi->ifi_addr = Calloc(1, sizeof(struct sockaddr_in6));
+  			memcpy(ifi->ifi_addr, sin6ptr, sizeof(struct sockaddr_in6));
+  
+  #ifdef	SIOCGIFDSTADDR
+  			if (flags & IFF_POINTOPOINT) {
+  				Ioctl(sockfd, SIOCGIFDSTADDR, &ifrcopy);
+  				sin6ptr = (struct sockaddr_in6 *) &ifrcopy.ifr_dstaddr;
+  				ifi->ifi_dstaddr = Calloc(1, sizeof(struct sockaddr_in6));
+  				memcpy(ifi->ifi_dstaddr, sin6ptr, sizeof(struct sockaddr_in6));
+  			}
+  #endif
+  			break;
+  
+  		default:
+  			break;
+  		}
+  	}
+  	free(buf);
+  	return(ifihead);	/* pointer to first structure in linked list */
+  }
+  /* end get_ifi_info4 */
+  
+  /* include free_ifi_info */
+  void
+  free_ifi_info(struct ifi_info *ifihead)
+  {
+  	struct ifi_info	*ifi, *ifinext;
+  
+  	for (ifi = ifihead; ifi != NULL; ifi = ifinext) {
+  		if (ifi->ifi_addr != NULL)
+  			free(ifi->ifi_addr);
+  		if (ifi->ifi_brdaddr != NULL)
+  			free(ifi->ifi_brdaddr);
+  		if (ifi->ifi_dstaddr != NULL)
+  			free(ifi->ifi_dstaddr);
+  		ifinext = ifi->ifi_next;	/* can't fetch ifi_next after free() */
+  		free(ifi);					/* the ifi_info{} itself */
+  	}
+  }
+  /* end free_ifi_info */
+  
+  struct ifi_info *
+  Get_ifi_info(int family, int doaliases)
+  {
+  	struct ifi_info	*ifi;
+  
+  	if ( (ifi = get_ifi_info(family, doaliases)) == NULL)
+  		err_quit("get_ifi_info error");
+  	return(ifi);
+  }
+  ```
+
+### 17.7 接口操作
+
+- 接口的获取版本(SIOCGxxx)通常由netstat程序发出
+- 接口的设置版本(SIOCSXXX)通常由ipconfig程序发出
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 11-27-43.png)
+
+### 17.8 ARP高速缓存操作
+
+- arpreq结构
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 11-30-02.png)
+
+- SIOCSARP
+
+- SIOCDARP
+
+- SIOCGARP
+
+- ioctl没有办法列出所有ARP缓存
+
+- 大多数arp -a程序通过读取内核的内存　/dev/kmem获取ARP高速缓存
+
+- ```c++
+  #include	"unpifi.h"
+  #include	<net/if_arp.h>
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int					sockfd;
+  	struct ifi_info			*ifi;
+  	unsigned char		*ptr;
+  	struct arpreq		arpreq;
+  	struct sockaddr_in	*sin;
+  
+  	sockfd = Socket(AF_INET, SOCK_DGRAM, 0);
+  	for (ifi = get_ifi_info(AF_INET, 0); ifi != NULL; ifi = ifi->ifi_next) {
+  		printf("%s: ", Sock_ntop(ifi->ifi_addr, sizeof(struct sockaddr_in)));
+  
+  		sin = (struct sockaddr_in *) &arpreq.arp_pa;
+  		memcpy(sin, ifi->ifi_addr, sizeof(struct sockaddr_in));
+  
+  		if (ioctl(sockfd, SIOCGARP, &arpreq) < 0) {
+  			err_ret("ioctl SIOCGARP");
+  			continue;
+  		}
+  
+  		ptr = &arpreq.arp_ha.sa_data[0];
+  		printf("%x:%x:%x:%x:%x:%x\n", *ptr, *(ptr+1),
+  			   *(ptr+2), *(ptr+3), *(ptr+4), *(ptr+5));
+  	}
+  	exit(0);
+  }
+  ```
+
+### 17.9 路由表操作
+
+- rtentry结构
+
+- 通常由route程序发出
+
+- SIOCADDRT
+
+- SIOCDELRT
+
+- netstat -r 通过读取内核的内存/dev/kmem获得整个路由表
+
+## 第18章　路由套接字
+
+- 通过创建AF_ROUTE域对访问内核中路由子系统的接口做了清理，在路由域中支持的唯一一种套接字是原始套接字
+- 路由套接字支持3种操作
+  - 进程可以通过写出到路由套接字而往内核发送消息
+  - 进程可以通过从路由套接字接入而自内核接收消息
+  - 进程可以使用sysctl函数倾斜出路由表或列出所有已配置的接口
+
+### 18.2 数据链路套接字地址结构
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 12-46-13.png)
+
+### 18.3 读和写
+
+- 创建一个路由套接字后，进程可以通过写到该套接字向内核发送命令，通过读自该套接字从内核接收信息
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 12-49-13.png)
+
+- 通过路由套接字交换的结构有5个类型: rt_msghdr  if_msghdr  ifa_msghdr  ifma_msghdr  if_announcemsghdr
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 12-51-30.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 13-00-45.png)
+- 默认路径在路由表中的目的IP地址为0.0.0.0 掩码为0.0.0.0
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 13-03-23.png)
+
+- ESRCH错误意味着内核找不到这个路径，EEXIST错误意味着与这个路径一致的路由表项已经存在
+
+- ```c++
+  /* include getrt1 */
+  #include	"unproute.h"
+  
+  #define	BUFLEN	(sizeof(struct rt_msghdr) + 512)
+  					/* sizeof(struct sockaddr_in6) * 8 = 192 */
+  #define	SEQ		9999
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int					sockfd;
+  	char				*buf;
+  	pid_t				pid;
+  	ssize_t				n;
+  	struct rt_msghdr	*rtm;
+  	struct sockaddr		*sa, *rti_info[RTAX_MAX];
+  	struct sockaddr_in	*sin;
+  
+  	if (argc != 2)
+  		err_quit("usage: getrt <IPaddress>");
+  
+  	sockfd = Socket(AF_ROUTE, SOCK_RAW, 0);	/* need superuser privileges */
+  
+  	buf = Calloc(1, BUFLEN);	/* and initialized to 0 */
+  
+  	rtm = (struct rt_msghdr *) buf;
+  	rtm->rtm_msglen = sizeof(struct rt_msghdr) + sizeof(struct sockaddr_in);
+  	rtm->rtm_version = RTM_VERSION;
+  	rtm->rtm_type = RTM_GET;
+  	rtm->rtm_addrs = RTA_DST;
+  	rtm->rtm_pid = pid = getpid();
+  	rtm->rtm_seq = SEQ;
+  
+  	sin = (struct sockaddr_in *) (rtm + 1);
+  	sin->sin_len = sizeof(struct sockaddr_in);
+  	sin->sin_family = AF_INET;
+      Inet_pton(AF_INET, argv[1], &sin->sin_addr);
+  
+  	Write(sockfd, rtm, rtm->rtm_msglen);
+  
+  	do {
+  		n = Read(sockfd, rtm, BUFLEN);
+  	} while (rtm->rtm_type != RTM_GET || rtm->rtm_seq != SEQ ||
+  			 rtm->rtm_pid != pid);
+  /* end getrt1 */
+  
+  /* include getrt2 */
+  	rtm = (struct rt_msghdr *) buf;
+  	sa = (struct sockaddr *) (rtm + 1);
+  	get_rtaddrs(rtm->rtm_addrs, sa, rti_info);
+  	if ( (sa = rti_info[RTAX_DST]) != NULL)
+  		printf("dest: %s\n", Sock_ntop_host(sa, sa->sa_len));
+  
+  	if ( (sa = rti_info[RTAX_GATEWAY]) != NULL)
+  		printf("gateway: %s\n", Sock_ntop_host(sa, sa->sa_len));
+  
+  	if ( (sa = rti_info[RTAX_NETMASK]) != NULL)
+  		printf("netmask: %s\n", Sock_masktop(sa, sa->sa_len));
+  
+  	if ( (sa = rti_info[RTAX_GENMASK]) != NULL)
+  		printf("genmask: %s\n", Sock_masktop(sa, sa->sa_len));
+  
+  	exit(0);
+  }
+  /* end getrt2 */
+  ```
+
+- ```c++
+  #include	"unproute.h"
+  
+  /*
+   * Round up 'a' to next multiple of 'size', which must be a power of 2
+   */
+  #define ROUNDUP(a, size) (((a) & ((size)-1)) ? (1 + ((a) | ((size)-1))) : (a))
+  
+  /*
+   * Step to next socket address structure;
+   * if sa_len is 0, assume it is sizeof(u_long).
+   */
+  #define NEXT_SA(ap)	ap = (SA *) \
+  	((caddr_t) ap + (ap->sa_len ? ROUNDUP(ap->sa_len, sizeof (u_long)) : \
+  									sizeof(u_long)))
+  
+  void
+  get_rtaddrs(int addrs, SA *sa, SA **rti_info)
+  {
+  	int		i;
+  
+  	for (i = 0; i < RTAX_MAX; i++) {
+  		if (addrs & (1 << i)) {
+  			rti_info[i] = sa;
+  			NEXT_SA(sa);
+  		} else
+  			rti_info[i] = NULL;
+  	}
+  }
+  ```
+
+- ```c++
+  #include	"unproute.h"
+  
+  const char *
+  sock_masktop(SA *sa, socklen_t salen)
+  {
+  	static char		str[INET6_ADDRSTRLEN];
+  	unsigned char	*ptr = &sa->sa_data[2];
+  
+  	if (sa->sa_len == 0)
+  		return("0.0.0.0");
+  	else if (sa->sa_len == 5)
+  		snprintf(str, sizeof(str), "%d.0.0.0", *ptr);
+  	else if (sa->sa_len == 6)
+  		snprintf(str, sizeof(str), "%d.%d.0.0", *ptr, *(ptr+1));
+  	else if (sa->sa_len == 7)
+  		snprintf(str, sizeof(str), "%d.%d.%d.0", *ptr, *(ptr+1), *(ptr+2));
+  	else if (sa->sa_len == 8)
+  		snprintf(str, sizeof(str), "%d.%d.%d.%d",
+  				 *ptr, *(ptr+1), *(ptr+2), *(ptr+3));
+  	else
+  		snprintf(str, sizeof(str), "(unknown mask, len = %d, family = %d)",
+  				 sa->sa_len, sa->sa_family);
+  	return(str);
+  }
+  ```
+
+### 18.4 sysctl操作
+
+- 使用sysctl检查路由表和接口列表的进程不限用户权限
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 14-03-53.png)
+
+- sysctl的手册页面详细叙述了可使用该函数获取的各种系统信息，有文件系统、虚拟内存、内核限制、硬件等各方面信息
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 14-09-17.png)
+
+- 路由域支持3种操作，由name[4]指定，这三种操作返回的信息通过sysctl调用中的oldp指针返回
+  - NET_RTDUMP 返回由name[3]指定的地址族的路由表
+  - NET_RT_FLAGS返回由name[3]指定的地址族的路由表，但是仅限于那些所带标志与由name[5]指定的标志相匹配的路由表项
+  - NET_RT_IFLIST返回所有已配置接口的信息....
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 14-17-15.png)
+
+- 检查UDP校验和是否开启
+
+  - ```c++
+    #include	"unproute.h"
+    #include	<netinet/udp.h>
+    #include	<netinet/ip_var.h>
+    #include	<netinet/udp_var.h>		/* for UDPCTL_xxx constants */
+    
+    int
+    main(int argc, char **argv)
+    {
+    	int		mib[4], val;
+    	size_t	len;
+    
+    	mib[0] = CTL_NET;
+    	mib[1] = AF_INET;
+    	mib[2] = IPPROTO_UDP;
+    	mib[3] = UDPCTL_CHECKSUM;
+    
+    	len = sizeof(val);
+    	Sysctl(mib, 4, &val, &len, NULL, 0);
+    	printf("udp checksum flag: %d\n", val);
+    
+    	exit(0);
+    }
+    ```
+
+### 18.5 get_ifi_info函数
+
+- 使用sysctl实现的版本，取代ioctl   SIOCGIFCONF实现的版本
+
+- 调用sysctl返回接口列表
+
+  - ```c++
+    /* include net_rt_iflist */
+    #include	"unproute.h"
+    
+    char *
+    net_rt_iflist(int family, int flags, size_t *lenp)
+    {
+    	int		mib[6];
+    	char	*buf;
+    
+    	mib[0] = CTL_NET;
+    	mib[1] = AF_ROUTE;
+    	mib[2] = 0;
+    	mib[3] = family;		/* only addresses of this family */
+    	mib[4] = NET_RT_IFLIST;
+    	mib[5] = flags;			/* interface index or 0 */
+    	if (sysctl(mib, 6, NULL, lenp, NULL, 0) < 0)
+    		return(NULL);
+    
+    	if ( (buf = malloc(*lenp)) == NULL)
+    		return(NULL);
+    	if (sysctl(mib, 6, buf, lenp, NULL, 0) < 0) {
+    		free(buf);
+    		return(NULL);
+    	}
+    
+    	return(buf);
+    }
+    /* end net_rt_iflist */
+    
+    char *
+    Net_rt_iflist(int family, int flags, size_t *lenp)
+    {
+    	char	*ptr;
+    
+    	if ( (ptr = net_rt_iflist(family, flags, lenp)) == NULL)
+    		err_sys("net_rt_iflist error");
+    	return(ptr);
+    }
+    ```
+
+- ```c++
+  #include	"unpifi.h"
+  #include	"unproute.h"
+  
+  /* include get_ifi_info1 */
+  struct ifi_info *
+  get_ifi_info(int family, int doaliases)
+  {
+  	int 				flags;
+  	char				*buf, *next, *lim;
+  	size_t				len;
+  	struct if_msghdr	*ifm;
+  	struct ifa_msghdr	*ifam;
+  	struct sockaddr		*sa, *rti_info[RTAX_MAX];
+  	struct sockaddr_dl	*sdl;
+  	struct ifi_info		*ifi, *ifisave, *ifihead, **ifipnext;
+  
+  	buf = Net_rt_iflist(family, 0, &len);
+  
+  	ifihead = NULL;
+  	ifipnext = &ifihead;
+  
+  	lim = buf + len;
+  	for (next = buf; next < lim; next += ifm->ifm_msglen) {
+  		ifm = (struct if_msghdr *) next;
+  		if (ifm->ifm_type == RTM_IFINFO) {
+  			if ( ((flags = ifm->ifm_flags) & IFF_UP) == 0)
+  				continue;	/* ignore if interface not up */
+  
+  			sa = (struct sockaddr *) (ifm + 1);
+  			get_rtaddrs(ifm->ifm_addrs, sa, rti_info);
+  			if ( (sa = rti_info[RTAX_IFP]) != NULL) {
+  				ifi = Calloc(1, sizeof(struct ifi_info));
+  				*ifipnext = ifi;			/* prev points to this new one */
+  				ifipnext = &ifi->ifi_next;	/* ptr to next one goes here */
+  
+  				ifi->ifi_flags = flags;
+  				if (sa->sa_family == AF_LINK) {
+  					sdl = (struct sockaddr_dl *) sa;
+  					ifi->ifi_index = sdl->sdl_index;
+  					if (sdl->sdl_nlen > 0)
+  						snprintf(ifi->ifi_name, IFI_NAME, "%*s",
+  								 sdl->sdl_nlen, &sdl->sdl_data[0]);
+  					else
+  						snprintf(ifi->ifi_name, IFI_NAME, "index %d",
+  								 sdl->sdl_index);
+  
+  					if ( (ifi->ifi_hlen = sdl->sdl_alen) > 0)
+  						memcpy(ifi->ifi_haddr, LLADDR(sdl),
+  							   min(IFI_HADDR, sdl->sdl_alen));
+  				}
+  			}
+  /* end get_ifi_info1 */
+  
+  /* include get_ifi_info3 */
+  		} else if (ifm->ifm_type == RTM_NEWADDR) {
+  			if (ifi->ifi_addr) {	/* already have an IP addr for i/f */
+  				if (doaliases == 0)
+  					continue;
+  
+  					/* 4we have a new IP addr for existing interface */
+  				ifisave = ifi;
+  				ifi = Calloc(1, sizeof(struct ifi_info));
+  				*ifipnext = ifi;			/* prev points to this new one */
+  				ifipnext = &ifi->ifi_next;	/* ptr to next one goes here */
+  				ifi->ifi_flags = ifisave->ifi_flags;
+  				ifi->ifi_index = ifisave->ifi_index;
+  				ifi->ifi_hlen = ifisave->ifi_hlen;
+  				memcpy(ifi->ifi_name, ifisave->ifi_name, IFI_NAME);
+  				memcpy(ifi->ifi_haddr, ifisave->ifi_haddr, IFI_HADDR);
+  			}
+  
+  			ifam = (struct ifa_msghdr *) next;
+  			sa = (struct sockaddr *) (ifam + 1);
+  			get_rtaddrs(ifam->ifam_addrs, sa, rti_info);
+  
+  			if ( (sa = rti_info[RTAX_IFA]) != NULL) {
+  				ifi->ifi_addr = Calloc(1, sa->sa_len);
+  				memcpy(ifi->ifi_addr, sa, sa->sa_len);
+  			}
+  
+  			if ((flags & IFF_BROADCAST) &&
+  				(sa = rti_info[RTAX_BRD]) != NULL) {
+  				ifi->ifi_brdaddr = Calloc(1, sa->sa_len);
+  				memcpy(ifi->ifi_brdaddr, sa, sa->sa_len);
+  			}
+  
+  			if ((flags & IFF_POINTOPOINT) &&
+  				(sa = rti_info[RTAX_BRD]) != NULL) {
+  				ifi->ifi_dstaddr = Calloc(1, sa->sa_len);
+  				memcpy(ifi->ifi_dstaddr, sa, sa->sa_len);
+  			}
+  
+  		} else
+  			err_quit("unexpected message type %d", ifm->ifm_type);
+  	}
+  	/* "ifihead" points to the first structure in the linked list */
+  	return(ifihead);	/* ptr to first structure in linked list */
+  }
+  /* end get_ifi_info3 */
+  
+  void
+  free_ifi_info(struct ifi_info *ifihead)
+  {
+  	struct ifi_info	*ifi, *ifinext;
+  
+  	for (ifi = ifihead; ifi != NULL; ifi = ifinext) {
+  		if (ifi->ifi_addr != NULL)
+  			free(ifi->ifi_addr);
+  		if (ifi->ifi_brdaddr != NULL)
+  			free(ifi->ifi_brdaddr);
+  		if (ifi->ifi_dstaddr != NULL)
+  			free(ifi->ifi_dstaddr);
+  		ifinext = ifi->ifi_next;		/* can't fetch ifi_next after free() */
+  		free(ifi);					/* the ifi_info{} itself */
+  	}
+  }
+  
+  struct ifi_info *
+  Get_ifi_info(int family, int doaliases)
+  {
+  	struct ifi_info	*ifi;
+  
+  	if ( (ifi = get_ifi_info(family, doaliases)) == NULL)
+  		err_quit("get_ifi_info error");
+  	return(ifi);
+  }
+  ```
+
+### 18.6 接口名字和索引函数
+
+- 每个接口都有一个唯一的名字和唯一的正值索引
+
+- if_namrtoindex 返回名字为ifname的接口的索引
+
+- if_indextoname返回索引为ifindex的接口的名字
+
+- if_nameindex返回一个指向if_nameindex结构数组的指针，if_freenameindex函数归还给系统
+
+- if_nametoindex函数
+
+  - ```c++
+    /* include if_nametoindex */
+    #include	"unpifi.h"
+    #include	"unproute.h"
+    
+    unsigned int
+    if_nametoindex(const char *name)
+    {
+    	unsigned int		idx, namelen;
+    	char				*buf, *next, *lim;
+    	size_t				len;
+    	struct if_msghdr	*ifm;
+    	struct sockaddr		*sa, *rti_info[RTAX_MAX];
+    	struct sockaddr_dl	*sdl;
+    
+    	if ( (buf = net_rt_iflist(0, 0, &len)) == NULL)
+    		return(0);
+    
+    	namelen = strlen(name);
+    	lim = buf + len;
+    	for (next = buf; next < lim; next += ifm->ifm_msglen) {
+    		ifm = (struct if_msghdr *) next;
+    		if (ifm->ifm_type == RTM_IFINFO) {
+    			sa = (struct sockaddr *) (ifm + 1);
+    			get_rtaddrs(ifm->ifm_addrs, sa, rti_info);
+    			if ( (sa = rti_info[RTAX_IFP]) != NULL) {
+    				if (sa->sa_family == AF_LINK) {
+    					sdl = (struct sockaddr_dl *) sa;
+    					if (sdl->sdl_nlen == namelen && strncmp(&sdl->sdl_data[0], name, sdl->sdl_nlen) == 0) {
+    						idx = sdl->sdl_index;	/* save before free() */
+    						free(buf);
+    						return(idx);
+    					}
+    				}
+    			}
+    
+    		}
+    	}
+    	free(buf);
+    	return(0);		/* no match for name */
+    }
+    /* end if_nametoindex */
+    
+    unsigned int
+    If_nametoindex(const char *name)
+    {
+    	int		idx;
+    
+    	if ( (idx = if_nametoindex(name)) == 0)
+    		err_quit("if_nametoindex error for %s", name);
+    	return(idx);
+    }
+    ```
+
+- if_indextoname函数
+
+  - ```c++
+    /* include if_indextoname */
+    #include	"unpifi.h"
+    #include	"unproute.h"
+    
+    char *
+    if_indextoname(unsigned int idx, char *name)
+    {
+    	char				*buf, *next, *lim;
+    	size_t				len;
+    	struct if_msghdr	*ifm;
+    	struct sockaddr		*sa, *rti_info[RTAX_MAX];
+    	struct sockaddr_dl	*sdl;
+    
+    	if ( (buf = net_rt_iflist(0, idx, &len)) == NULL)
+    		return(NULL);
+    
+    	lim = buf + len;
+    	for (next = buf; next < lim; next += ifm->ifm_msglen) {
+    		ifm = (struct if_msghdr *) next;
+    		if (ifm->ifm_type == RTM_IFINFO) {
+    			sa = (struct sockaddr *) (ifm + 1);
+    			get_rtaddrs(ifm->ifm_addrs, sa, rti_info);
+    			if ( (sa = rti_info[RTAX_IFP]) != NULL) {
+    				if (sa->sa_family == AF_LINK) {
+    					sdl = (struct sockaddr_dl *) sa;
+    					if (sdl->sdl_index == idx) {
+    						int slen = min(IFNAMSIZ - 1, sdl->sdl_nlen);
+    						strncpy(name, sdl->sdl_data, slen);
+    						name[slen] = 0;	/* null terminate */
+    						free(buf);
+    						return(name);
+    					}
+    				}
+    			}
+    
+    		}
+    	}
+    	free(buf);
+    	return(NULL);		/* no match for index */
+    }
+    /* end if_indextoname */
+    
+    char *
+    If_indextoname(unsigned int idx, char *name)
+    {
+    	char	*ptr;
+    
+    	if ( (ptr = if_indextoname(idx, name)) == NULL)
+    		err_quit("if_indextoname error for %d", idx);
+    	return(ptr);
+    }
+    ```
+
+- if_nameindex函数
+
+  - ```c++
+    /* include if_nameindex */
+    #include	"unpifi.h"
+    #include	"unproute.h"
+    
+    struct if_nameindex *
+    if_nameindex(void)
+    {
+    	char				*buf, *next, *lim;
+    	size_t				len;
+    	struct if_msghdr	*ifm;
+    	struct sockaddr		*sa, *rti_info[RTAX_MAX];
+    	struct sockaddr_dl	*sdl;
+    	struct if_nameindex	*result, *ifptr;
+    	char				*namptr;
+    
+    	if ( (buf = net_rt_iflist(0, 0, &len)) == NULL)
+    		return(NULL);
+    
+    	if ( (result = malloc(len)) == NULL)	/* overestimate */
+    		return(NULL);
+    	ifptr = result;
+    	namptr = (char *) result + len;	/* names start at end of buffer */
+    
+    	lim = buf + len;
+    	for (next = buf; next < lim; next += ifm->ifm_msglen) {
+    		ifm = (struct if_msghdr *) next;
+    		if (ifm->ifm_type == RTM_IFINFO) {
+    			sa = (struct sockaddr *) (ifm + 1);
+    			get_rtaddrs(ifm->ifm_addrs, sa, rti_info);
+    			if ( (sa = rti_info[RTAX_IFP]) != NULL) {
+    				if (sa->sa_family == AF_LINK) {
+    					sdl = (struct sockaddr_dl *) sa;
+    					namptr -= sdl->sdl_nlen + 1;
+    					strncpy(namptr, &sdl->sdl_data[0], sdl->sdl_nlen);
+    					namptr[sdl->sdl_nlen] = 0;	/* null terminate */
+    					ifptr->if_name = namptr;
+    					ifptr->if_index = sdl->sdl_index;
+    					ifptr++;
+    				}
+    			}
+    
+    		}
+    	}
+    	ifptr->if_name = NULL;	/* mark end of array of structs */
+    	ifptr->if_index = 0;
+    	free(buf);
+    	return(result);			/* caller must free() this when done */
+    }
+    /* end if_nameindex */
+    
+    /* include if_freenameindex */
+    void
+    if_freenameindex(struct if_nameindex *ptr)
+    {
+    	free(ptr);
+    }
+    /* end if_freenameindex */
+    
+    struct if_nameindex *
+    If_nameindex(void)
+    {
+    	struct if_nameindex	*ifptr;
+    
+    	if ( (ifptr = if_nameindex()) == NULL)
+    		err_quit("if_nameindex error");
+    	return(ifptr);
+    }
+    ```
+
+    
+
+  

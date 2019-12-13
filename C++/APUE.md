@@ -5015,5 +5015,2026 @@
 - 终端模拟器是应用程序，用于模拟一个终端。它一般是GUI程序，带有窗口。从窗口输入的字符作为模拟键盘的输入，在窗口上打印的字符作为模拟显示器的输出。终端模拟器还需要创建模拟的终端设备（如`/dev/pts/1`），用于当做命令行进程（CLI进程）的输入输出、控制终端。当键盘键入一个字符，它要让CLI进程从终端设备中读到这个字符，当CLI进程写入终端设备时，终端模拟器要读到并显示出来
 - 伪终端是伪终端master和伪终端slave（终端设备文件）这一对字符设备。`/dev/ptmx`是用于创建一对master、slave的文件。当一个进程打开它时，获得了一个master的文件描述符（file descriptor），同时在`/dev/pts`下创建了一个slave设备文件。
 - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-10 14-51-02.png)
-
 - 当终端模拟器运行时，它通过`/dev/ptmx`打开master端，创建了一个伪终端对，并让shell运行在slave端。当用户在终端模拟器中按下键盘按键时，它产生字节流并写入master中，shell便可从slave中读取输入；shell和它的子程序，将输出内容写入slave中，由终端模拟器负责将字符打印到窗口中。
+
+
+
+## 第20章　数据库函数库
+
+### 20.2 历史
+
+- gdbm库
+- 并发控制(记录锁机制)
+- B+树　动态散列技术
+
+### 20.3 函数库
+
+- db_open
+- db_close
+- db_store
+- db_fetch
+- db_delete
+- db_rewind回滚到数据库的第一条记录
+- db_nextrec顺序地读每条记录
+
+### 20.4 实现概述
+
+- 索引文件包括实际的索引值和一个指向数据文件中对应记录的指针，可采用散列表和B+树实现
+
+- 数据文件
+
+- 按照字符串形式存储所有的记录，包含键和数据
+
+- ```c++
+  #include "apue.h"
+  #include "apue_db.h"
+  #include <fcntl.h>
+  
+  int
+  main(void)
+  {
+  	DBHANDLE	db;
+  
+  	if ((db = db_open("db4", O_RDWR | O_CREAT | O_TRUNC,
+  	  FILE_MODE)) == NULL)
+  		err_sys("db_open error");
+  
+  	if (db_store(db, "Alpha", "data1", DB_INSERT) != 0)
+  		err_quit("db_store error for alpha");
+  	if (db_store(db, "beta", "Data for beta", DB_INSERT) != 0)
+  		err_quit("db_store error for beta");
+  	if (db_store(db, "gamma", "record3", DB_INSERT) != 0)
+  		err_quit("db_store error for gamma");
+  
+  	db_close(db);
+  	exit(0);
+  }
+  ```
+
+### 20.5　集中式或非集中式
+
+- 集中式，由一个进程作为数据库管理者，所有的数据库访问工作由此进程完成，其他进程通过IPC机制与此中心进程进行联系
+- 非集中式，每个库函数使用要求的并发控制(加锁)，然后发起自己的I/O函数调用
+
+### 20.6 并发
+
+- 粗粒度锁
+- 细粒度锁
+
+### 20.7 构造函数库
+
+- 构造一个静态函数库
+  - gcc -I../include -Wall -c db.c
+  - ar rsv libapue_db.a db.o
+- 构造一个动态共享库版本
+  -  gcc -I../include -Wall -fPIC -c db.c
+  - gcc -shared -Wl,-soname,libapue_db.so.1 -o libapue_db.so.1 -L../lib -lapue -lc db.o
+  - 构建成的共享库libapue_db.so.1需要放置在动态连接程序/载入程序能够找到的一个公共目录中，还可以将共享库放在一个私有目录中，修改LD_LIBRARY_PATH环境变量，使动态连接程序/载入程序的搜索路径包含该私有目录
+
+### 20.8 源代码
+
+```c++
+#include "apue.h"
+#include "apue_db.h"
+#include <fcntl.h>		/* open & db_open flags */
+#include <stdarg.h>
+#include <errno.h>
+#include <sys/uio.h>	/* struct iovec */
+
+/*
+ * Internal index file constants.
+ * These are used to construct records in the
+ * index file and data file.
+ */
+#define IDXLEN_SZ	   4	/* index record length (ASCII chars) */
+#define SEP         ':'	/* separator char in index record */
+#define SPACE       ' '	/* space character */
+#define NEWLINE     '\n'	/* newline character */
+
+/*
+ * The following definitions are for hash chains and free
+ * list chain in the index file.
+ */
+#define PTR_SZ        7	/* size of ptr field in hash chain */
+#define PTR_MAX 9999999	/* max file offset = 10**PTR_SZ - 1 */
+#define NHASH_DEF	 137	/* default hash table size */
+#define FREE_OFF      0	/* free list offset in index file */
+#define HASH_OFF PTR_SZ	/* hash table offset in index file */
+
+typedef unsigned long	DBHASH;	/* hash values */
+typedef unsigned long	COUNT;	/* unsigned counter */
+
+/*
+ * Library's private representation of the database.
+ */
+typedef struct {
+  int    idxfd;  /* fd for index file */
+  int    datfd;  /* fd for data file */
+  char  *idxbuf; /* malloc'ed buffer for index record */
+  char  *datbuf; /* malloc'ed buffer for data record*/
+  char  *name;   /* name db was opened under */
+  off_t  idxoff; /* offset in index file of index record */
+			      /* key is at (idxoff + PTR_SZ + IDXLEN_SZ) */
+  size_t idxlen; /* length of index record */
+			      /* excludes IDXLEN_SZ bytes at front of record */
+			      /* includes newline at end of index record */
+  off_t  datoff; /* offset in data file of data record */
+  size_t datlen; /* length of data record */
+			      /* includes newline at end */
+  off_t  ptrval; /* contents of chain ptr in index record */
+  off_t  ptroff; /* chain ptr offset pointing to this idx record */
+  off_t  chainoff; /* offset of hash chain for this index record */
+  off_t  hashoff;  /* offset in index file of hash table */
+  DBHASH nhash;    /* current hash table size */
+  COUNT  cnt_delok;    /* delete OK */
+  COUNT  cnt_delerr;   /* delete error */
+  COUNT  cnt_fetchok;  /* fetch OK */
+  COUNT  cnt_fetcherr; /* fetch error */
+  COUNT  cnt_nextrec;  /* nextrec */
+  COUNT  cnt_stor1;    /* store: DB_INSERT, no empty, appended */
+  COUNT  cnt_stor2;    /* store: DB_INSERT, found empty, reused */
+  COUNT  cnt_stor3;    /* store: DB_REPLACE, diff len, appended */
+  COUNT  cnt_stor4;    /* store: DB_REPLACE, same len, overwrote */
+  COUNT  cnt_storerr;  /* store error */
+} DB;
+
+/*
+ * Internal functions.
+ */
+static DB     *_db_alloc(int);
+static void    _db_dodelete(DB *);
+static int	    _db_find_and_lock(DB *, const char *, int);
+static int     _db_findfree(DB *, int, int);
+static void    _db_free(DB *);
+static DBHASH  _db_hash(DB *, const char *);
+static char   *_db_readdat(DB *);
+static off_t   _db_readidx(DB *, off_t);
+static off_t   _db_readptr(DB *, off_t);
+static void    _db_writedat(DB *, const char *, off_t, int);
+static void    _db_writeidx(DB *, const char *, off_t, int, off_t);
+static void    _db_writeptr(DB *, off_t, off_t);
+
+/*
+ * Open or create a database.  Same arguments as open(2).
+ */
+DBHANDLE
+db_open(const char *pathname, int oflag, ...)
+{
+	DB			*db;
+	int			len, mode;
+	size_t		i;
+	char		asciiptr[PTR_SZ + 1],
+				hash[(NHASH_DEF + 1) * PTR_SZ + 2];
+					/* +2 for newline and null */
+	struct stat	statbuff;
+
+	/*
+	 * Allocate a DB structure, and the buffers it needs.
+	 */
+	len = strlen(pathname);
+	if ((db = _db_alloc(len)) == NULL)
+		err_dump("db_open: _db_alloc error for DB");
+
+	db->nhash   = NHASH_DEF;/* hash table size */
+	db->hashoff = HASH_OFF;	/* offset in index file of hash table */
+	strcpy(db->name, pathname);
+	strcat(db->name, ".idx");
+
+	if (oflag & O_CREAT) {
+		va_list ap;
+
+		va_start(ap, oflag);
+		mode = va_arg(ap, int);
+		va_end(ap);
+
+		/*
+		 * Open index file and data file.
+		 */
+		db->idxfd = open(db->name, oflag, mode);
+		strcpy(db->name + len, ".dat");
+		db->datfd = open(db->name, oflag, mode);
+	} else {
+		/*
+		 * Open index file and data file.
+		 */
+		db->idxfd = open(db->name, oflag);
+		strcpy(db->name + len, ".dat");
+		db->datfd = open(db->name, oflag);
+	}
+
+	if (db->idxfd < 0 || db->datfd < 0) {
+		_db_free(db);
+		return(NULL);
+	}
+
+	if ((oflag & (O_CREAT | O_TRUNC)) == (O_CREAT | O_TRUNC)) {
+		/*
+		 * If the database was created, we have to initialize
+		 * it.  Write lock the entire file so that we can stat
+		 * it, check its size, and initialize it, atomically.
+		 */
+		if (writew_lock(db->idxfd, 0, SEEK_SET, 0) < 0)
+			err_dump("db_open: writew_lock error");
+
+		if (fstat(db->idxfd, &statbuff) < 0)
+			err_sys("db_open: fstat error");
+
+		if (statbuff.st_size == 0) {
+			/*
+			 * We have to build a list of (NHASH_DEF + 1) chain
+			 * ptrs with a value of 0.  The +1 is for the free
+			 * list pointer that precedes the hash table.
+			 */
+			sprintf(asciiptr, "%*d", PTR_SZ, 0);
+			hash[0] = 0;
+			for (i = 0; i < NHASH_DEF + 1; i++)
+				strcat(hash, asciiptr);
+			strcat(hash, "\n");
+			i = strlen(hash);
+			if (write(db->idxfd, hash, i) != i)
+				err_dump("db_open: index file init write error");
+		}
+		if (un_lock(db->idxfd, 0, SEEK_SET, 0) < 0)
+			err_dump("db_open: un_lock error");
+	}
+	db_rewind(db);
+	return(db);
+}
+
+/*
+ * Allocate & initialize a DB structure and its buffers.
+ */
+static DB *
+_db_alloc(int namelen)
+{
+	DB		*db;
+
+	/*
+	 * Use calloc, to initialize the structure to zero.
+	 */
+	if ((db = calloc(1, sizeof(DB))) == NULL)
+		err_dump("_db_alloc: calloc error for DB");
+	db->idxfd = db->datfd = -1;				/* descriptors */
+
+	/*
+	 * Allocate room for the name.
+	 * +5 for ".idx" or ".dat" plus null at end.
+	 */
+	if ((db->name = malloc(namelen + 5)) == NULL)
+		err_dump("_db_alloc: malloc error for name");
+
+	/*
+	 * Allocate an index buffer and a data buffer.
+	 * +2 for newline and null at end.
+	 */
+	if ((db->idxbuf = malloc(IDXLEN_MAX + 2)) == NULL)
+		err_dump("_db_alloc: malloc error for index buffer");
+	if ((db->datbuf = malloc(DATLEN_MAX + 2)) == NULL)
+		err_dump("_db_alloc: malloc error for data buffer");
+	return(db);
+}
+
+/*
+ * Relinquish access to the database.
+ */
+void
+db_close(DBHANDLE h)
+{
+	_db_free((DB *)h);	/* closes fds, free buffers & struct */
+}
+
+/*
+ * Free up a DB structure, and all the malloc'ed buffers it
+ * may point to.  Also close the file descriptors if still open.
+ */
+static void
+_db_free(DB *db)
+{
+	if (db->idxfd >= 0)
+		close(db->idxfd);
+	if (db->datfd >= 0)
+		close(db->datfd);
+	if (db->idxbuf != NULL)
+		free(db->idxbuf);
+	if (db->datbuf != NULL)
+		free(db->datbuf);
+	if (db->name != NULL)
+		free(db->name);
+	free(db);
+}
+
+/*
+ * Fetch a record.  Return a pointer to the null-terminated data.
+ */
+char *
+db_fetch(DBHANDLE h, const char *key)
+{
+	DB      *db = h;
+	char	*ptr;
+
+	if (_db_find_and_lock(db, key, 0) < 0) {
+		ptr = NULL;				/* error, record not found */
+		db->cnt_fetcherr++;
+	} else {
+		ptr = _db_readdat(db);	/* return pointer to data */
+		db->cnt_fetchok++;
+	}
+
+	/*
+	 * Unlock the hash chain that _db_find_and_lock locked.
+	 */
+	if (un_lock(db->idxfd, db->chainoff, SEEK_SET, 1) < 0)
+		err_dump("db_fetch: un_lock error");
+	return(ptr);
+}
+
+/*
+ * Find the specified record.  Called by db_delete, db_fetch,
+ * and db_store.  Returns with the hash chain locked.
+ */
+static int
+_db_find_and_lock(DB *db, const char *key, int writelock)
+{
+	off_t	offset, nextoffset;
+
+	/*
+	 * Calculate the hash value for this key, then calculate the
+	 * byte offset of corresponding chain ptr in hash table.
+	 * This is where our search starts.  First we calculate the
+	 * offset in the hash table for this key.
+	 */
+	db->chainoff = (_db_hash(db, key) * PTR_SZ) + db->hashoff;
+	db->ptroff = db->chainoff;
+
+	/*
+	 * We lock the hash chain here.  The caller must unlock it
+	 * when done.  Note we lock and unlock only the first byte.
+	 */
+	if (writelock) {
+		if (writew_lock(db->idxfd, db->chainoff, SEEK_SET, 1) < 0)
+			err_dump("_db_find_and_lock: writew_lock error");
+	} else {
+		if (readw_lock(db->idxfd, db->chainoff, SEEK_SET, 1) < 0)
+			err_dump("_db_find_and_lock: readw_lock error");
+	}
+
+	/*
+	 * Get the offset in the index file of first record
+	 * on the hash chain (can be 0).
+	 */
+	offset = _db_readptr(db, db->ptroff);
+	while (offset != 0) {
+		nextoffset = _db_readidx(db, offset);
+		if (strcmp(db->idxbuf, key) == 0)
+			break;       /* found a match */
+		db->ptroff = offset; /* offset of this (unequal) record */
+		offset = nextoffset; /* next one to compare */
+	}
+	/*
+	 * offset == 0 on error (record not found).
+	 */
+	return(offset == 0 ? -1 : 0);
+}
+
+/*
+ * Calculate the hash value for a key.
+ */
+static DBHASH
+_db_hash(DB *db, const char *key)
+{
+	DBHASH		hval = 0;
+	char		c;
+	int			i;
+
+	for (i = 1; (c = *key++) != 0; i++)
+		hval += c * i;		/* ascii char times its 1-based index */
+	return(hval % db->nhash);
+}
+
+/*
+ * Read a chain ptr field from anywhere in the index file:
+ * the free list pointer, a hash table chain ptr, or an
+ * index record chain ptr.
+ */
+static off_t
+_db_readptr(DB *db, off_t offset)
+{
+	char	asciiptr[PTR_SZ + 1];
+
+	if (lseek(db->idxfd, offset, SEEK_SET) == -1)
+		err_dump("_db_readptr: lseek error to ptr field");
+	if (read(db->idxfd, asciiptr, PTR_SZ) != PTR_SZ)
+		err_dump("_db_readptr: read error of ptr field");
+	asciiptr[PTR_SZ] = 0;		/* null terminate */
+	return(atol(asciiptr));
+}
+
+/*
+ * Read the next index record.  We start at the specified offset
+ * in the index file.  We read the index record into db->idxbuf
+ * and replace the separators with null bytes.  If all is OK we
+ * set db->datoff and db->datlen to the offset and length of the
+ * corresponding data record in the data file.
+ */
+static off_t
+_db_readidx(DB *db, off_t offset)
+{
+	ssize_t				i;
+	char			*ptr1, *ptr2;
+	char			asciiptr[PTR_SZ + 1], asciilen[IDXLEN_SZ + 1];
+	struct iovec	iov[2];
+
+	/*
+	 * Position index file and record the offset.  db_nextrec
+	 * calls us with offset==0, meaning read from current offset.
+	 * We still need to call lseek to record the current offset.
+	 */
+	if ((db->idxoff = lseek(db->idxfd, offset,
+	  offset == 0 ? SEEK_CUR : SEEK_SET)) == -1)
+		err_dump("_db_readidx: lseek error");
+
+	/*
+	 * Read the ascii chain ptr and the ascii length at
+	 * the front of the index record.  This tells us the
+	 * remaining size of the index record.
+	 */
+	iov[0].iov_base = asciiptr;
+	iov[0].iov_len  = PTR_SZ;
+	iov[1].iov_base = asciilen;
+	iov[1].iov_len  = IDXLEN_SZ;
+	if ((i = readv(db->idxfd, &iov[0], 2)) != PTR_SZ + IDXLEN_SZ) {
+		if (i == 0 && offset == 0)
+			return(-1);		/* EOF for db_nextrec */
+		err_dump("_db_readidx: readv error of index record");
+	}
+
+	/*
+	 * This is our return value; always >= 0.
+	 */
+	asciiptr[PTR_SZ] = 0;        /* null terminate */
+	db->ptrval = atol(asciiptr); /* offset of next key in chain */
+
+	asciilen[IDXLEN_SZ] = 0;     /* null terminate */
+	if ((db->idxlen = atoi(asciilen)) < IDXLEN_MIN ||
+	  db->idxlen > IDXLEN_MAX)
+		err_dump("_db_readidx: invalid length");
+
+	/*
+	 * Now read the actual index record.  We read it into the key
+	 * buffer that we malloced when we opened the database.
+	 */
+	if ((i = read(db->idxfd, db->idxbuf, db->idxlen)) != db->idxlen)
+		err_dump("_db_readidx: read error of index record");
+	if (db->idxbuf[db->idxlen-1] != NEWLINE)	/* sanity check */
+		err_dump("_db_readidx: missing newline");
+	db->idxbuf[db->idxlen-1] = 0;	 /* replace newline with null */
+
+	/*
+	 * Find the separators in the index record.
+	 */
+	if ((ptr1 = strchr(db->idxbuf, SEP)) == NULL)
+		err_dump("_db_readidx: missing first separator");
+	*ptr1++ = 0;				/* replace SEP with null */
+
+	if ((ptr2 = strchr(ptr1, SEP)) == NULL)
+		err_dump("_db_readidx: missing second separator");
+	*ptr2++ = 0;				/* replace SEP with null */
+
+	if (strchr(ptr2, SEP) != NULL)
+		err_dump("_db_readidx: too many separators");
+
+	/*
+	 * Get the starting offset and length of the data record.
+	 */
+	if ((db->datoff = atol(ptr1)) < 0)
+		err_dump("_db_readidx: starting offset < 0");
+	if ((db->datlen = atol(ptr2)) <= 0 || db->datlen > DATLEN_MAX)
+		err_dump("_db_readidx: invalid length");
+	return(db->ptrval);		/* return offset of next key in chain */
+}
+
+/*
+ * Read the current data record into the data buffer.
+ * Return a pointer to the null-terminated data buffer.
+ */
+static char *
+_db_readdat(DB *db)
+{
+	if (lseek(db->datfd, db->datoff, SEEK_SET) == -1)
+		err_dump("_db_readdat: lseek error");
+	if (read(db->datfd, db->datbuf, db->datlen) != db->datlen)
+		err_dump("_db_readdat: read error");
+	if (db->datbuf[db->datlen-1] != NEWLINE)	/* sanity check */
+		err_dump("_db_readdat: missing newline");
+	db->datbuf[db->datlen-1] = 0; /* replace newline with null */
+	return(db->datbuf);		/* return pointer to data record */
+}
+
+/*
+ * Delete the specified record.
+ */
+int
+db_delete(DBHANDLE h, const char *key)
+{
+	DB		*db = h;
+	int		rc = 0;			/* assume record will be found */
+
+	if (_db_find_and_lock(db, key, 1) == 0) {
+		_db_dodelete(db);
+		db->cnt_delok++;
+	} else {
+		rc = -1;			/* not found */
+		db->cnt_delerr++;
+	}
+	if (un_lock(db->idxfd, db->chainoff, SEEK_SET, 1) < 0)
+		err_dump("db_delete: un_lock error");
+	return(rc);
+}
+
+/*
+ * Delete the current record specified by the DB structure.
+ * This function is called by db_delete and db_store, after
+ * the record has been located by _db_find_and_lock.
+ */
+static void
+_db_dodelete(DB *db)
+{
+	int		i;
+	char	*ptr;
+	off_t	freeptr, saveptr;
+
+	/*
+	 * Set data buffer and key to all blanks.
+	 */
+	for (ptr = db->datbuf, i = 0; i < db->datlen - 1; i++)
+		*ptr++ = SPACE;
+	*ptr = 0;	/* null terminate for _db_writedat */
+	ptr = db->idxbuf;
+	while (*ptr)
+		*ptr++ = SPACE;
+
+	/*
+	 * We have to lock the free list.
+	 */
+	if (writew_lock(db->idxfd, FREE_OFF, SEEK_SET, 1) < 0)
+		err_dump("_db_dodelete: writew_lock error");
+
+	/*
+	 * Write the data record with all blanks.
+	 */
+	_db_writedat(db, db->datbuf, db->datoff, SEEK_SET);
+
+	/*
+	 * Read the free list pointer.  Its value becomes the
+	 * chain ptr field of the deleted index record.  This means
+	 * the deleted record becomes the head of the free list.
+	 */
+	freeptr = _db_readptr(db, FREE_OFF);
+
+	/*
+	 * Save the contents of index record chain ptr,
+	 * before it's rewritten by _db_writeidx.
+	 */
+	saveptr = db->ptrval;
+
+	/*
+	 * Rewrite the index record.  This also rewrites the length
+	 * of the index record, the data offset, and the data length,
+	 * none of which has changed, but that's OK.
+	 */
+	_db_writeidx(db, db->idxbuf, db->idxoff, SEEK_SET, freeptr);
+
+	/*
+	 * Write the new free list pointer.
+	 */
+	_db_writeptr(db, FREE_OFF, db->idxoff);
+
+	/*
+	 * Rewrite the chain ptr that pointed to this record being
+	 * deleted.  Recall that _db_find_and_lock sets db->ptroff to
+	 * point to this chain ptr.  We set this chain ptr to the
+	 * contents of the deleted record's chain ptr, saveptr.
+	 */
+	_db_writeptr(db, db->ptroff, saveptr);
+	if (un_lock(db->idxfd, FREE_OFF, SEEK_SET, 1) < 0)
+		err_dump("_db_dodelete: un_lock error");
+}
+
+/*
+ * Write a data record.  Called by _db_dodelete (to write
+ * the record with blanks) and db_store.
+ */
+static void
+_db_writedat(DB *db, const char *data, off_t offset, int whence)
+{
+	struct iovec	iov[2];
+	static char		newline = NEWLINE;
+
+	/*
+	 * If we're appending, we have to lock before doing the lseek
+	 * and write to make the two an atomic operation.  If we're
+	 * overwriting an existing record, we don't have to lock.
+	 */
+	if (whence == SEEK_END) /* we're appending, lock entire file */
+		if (writew_lock(db->datfd, 0, SEEK_SET, 0) < 0)
+			err_dump("_db_writedat: writew_lock error");
+
+	if ((db->datoff = lseek(db->datfd, offset, whence)) == -1)
+		err_dump("_db_writedat: lseek error");
+	db->datlen = strlen(data) + 1;	/* datlen includes newline */
+
+	iov[0].iov_base = (char *) data;
+	iov[0].iov_len  = db->datlen - 1;
+	iov[1].iov_base = &newline;
+	iov[1].iov_len  = 1;
+	if (writev(db->datfd, &iov[0], 2) != db->datlen)
+		err_dump("_db_writedat: writev error of data record");
+
+	if (whence == SEEK_END)
+		if (un_lock(db->datfd, 0, SEEK_SET, 0) < 0)
+			err_dump("_db_writedat: un_lock error");
+}
+
+/*
+ * Write an index record.  _db_writedat is called before
+ * this function to set the datoff and datlen fields in the
+ * DB structure, which we need to write the index record.
+ */
+static void
+_db_writeidx(DB *db, const char *key,
+             off_t offset, int whence, off_t ptrval)
+{
+	struct iovec	iov[2];
+	char			asciiptrlen[PTR_SZ + IDXLEN_SZ + 1];
+	int				len;
+
+	if ((db->ptrval = ptrval) < 0 || ptrval > PTR_MAX)
+		err_quit("_db_writeidx: invalid ptr: %d", ptrval);
+	sprintf(db->idxbuf, "%s%c%lld%c%ld\n", key, SEP,
+	  (long long)db->datoff, SEP, (long)db->datlen);
+	len = strlen(db->idxbuf);
+	if (len < IDXLEN_MIN || len > IDXLEN_MAX)
+		err_dump("_db_writeidx: invalid length");
+	sprintf(asciiptrlen, "%*lld%*d", PTR_SZ, (long long)ptrval,
+	  IDXLEN_SZ, len);
+
+	/*
+	 * If we're appending, we have to lock before doing the lseek
+	 * and write to make the two an atomic operation.  If we're
+	 * overwriting an existing record, we don't have to lock.
+	 */
+	if (whence == SEEK_END)		/* we're appending */
+		if (writew_lock(db->idxfd, ((db->nhash+1)*PTR_SZ)+1,
+		  SEEK_SET, 0) < 0)
+			err_dump("_db_writeidx: writew_lock error");
+
+	/*
+	 * Position the index file and record the offset.
+	 */
+	if ((db->idxoff = lseek(db->idxfd, offset, whence)) == -1)
+		err_dump("_db_writeidx: lseek error");
+
+	iov[0].iov_base = asciiptrlen;
+	iov[0].iov_len  = PTR_SZ + IDXLEN_SZ;
+	iov[1].iov_base = db->idxbuf;
+	iov[1].iov_len  = len;
+	if (writev(db->idxfd, &iov[0], 2) != PTR_SZ + IDXLEN_SZ + len)
+		err_dump("_db_writeidx: writev error of index record");
+
+	if (whence == SEEK_END)
+		if (un_lock(db->idxfd, ((db->nhash+1)*PTR_SZ)+1,
+		  SEEK_SET, 0) < 0)
+			err_dump("_db_writeidx: un_lock error");
+}
+
+/*
+ * Write a chain ptr field somewhere in the index file:
+ * the free list, the hash table, or in an index record.
+ */
+static void
+_db_writeptr(DB *db, off_t offset, off_t ptrval)
+{
+	char	asciiptr[PTR_SZ + 1];
+
+	if (ptrval < 0 || ptrval > PTR_MAX)
+		err_quit("_db_writeptr: invalid ptr: %d", ptrval);
+	sprintf(asciiptr, "%*lld", PTR_SZ, (long long)ptrval);
+
+	if (lseek(db->idxfd, offset, SEEK_SET) == -1)
+		err_dump("_db_writeptr: lseek error to ptr field");
+	if (write(db->idxfd, asciiptr, PTR_SZ) != PTR_SZ)
+		err_dump("_db_writeptr: write error of ptr field");
+}
+
+/*
+ * Store a record in the database.  Return 0 if OK, 1 if record
+ * exists and DB_INSERT specified, -1 on error.
+ */
+int
+db_store(DBHANDLE h, const char *key, const char *data, int flag)
+{
+	DB		*db = h;
+	int		rc, keylen, datlen;
+	off_t	ptrval;
+
+	if (flag != DB_INSERT && flag != DB_REPLACE &&
+	  flag != DB_STORE) {
+		errno = EINVAL;
+		return(-1);
+	}
+	keylen = strlen(key);
+	datlen = strlen(data) + 1;		/* +1 for newline at end */
+	if (datlen < DATLEN_MIN || datlen > DATLEN_MAX)
+		err_dump("db_store: invalid data length");
+
+	/*
+	 * _db_find_and_lock calculates which hash table this new record
+	 * goes into (db->chainoff), regardless of whether it already
+	 * exists or not. The following calls to _db_writeptr change the
+	 * hash table entry for this chain to point to the new record.
+	 * The new record is added to the front of the hash chain.
+	 */
+	if (_db_find_and_lock(db, key, 1) < 0) { /* record not found */
+		if (flag == DB_REPLACE) {
+			rc = -1;
+			db->cnt_storerr++;
+			errno = ENOENT;		/* error, record does not exist */
+			goto doreturn;
+		}
+
+		/*
+		 * _db_find_and_lock locked the hash chain for us; read
+		 * the chain ptr to the first index record on hash chain.
+		 */
+		ptrval = _db_readptr(db, db->chainoff);
+
+		if (_db_findfree(db, keylen, datlen) < 0) {
+			/*
+			 * Can't find an empty record big enough. Append the
+			 * new record to the ends of the index and data files.
+			 */
+			_db_writedat(db, data, 0, SEEK_END);
+			_db_writeidx(db, key, 0, SEEK_END, ptrval);
+
+			/*
+			 * db->idxoff was set by _db_writeidx.  The new
+			 * record goes to the front of the hash chain.
+			 */
+			_db_writeptr(db, db->chainoff, db->idxoff);
+			db->cnt_stor1++;
+		} else {
+			/*
+			 * Reuse an empty record. _db_findfree removed it from
+			 * the free list and set both db->datoff and db->idxoff.
+			 * Reused record goes to the front of the hash chain.
+			 */
+			_db_writedat(db, data, db->datoff, SEEK_SET);
+			_db_writeidx(db, key, db->idxoff, SEEK_SET, ptrval);
+			_db_writeptr(db, db->chainoff, db->idxoff);
+			db->cnt_stor2++;
+		}
+	} else {						/* record found */
+		if (flag == DB_INSERT) {
+			rc = 1;		/* error, record already in db */
+			db->cnt_storerr++;
+			goto doreturn;
+		}
+
+		/*
+		 * We are replacing an existing record.  We know the new
+		 * key equals the existing key, but we need to check if
+		 * the data records are the same size.
+		 */
+		if (datlen != db->datlen) {
+			_db_dodelete(db);	/* delete the existing record */
+
+			/*
+			 * Reread the chain ptr in the hash table
+			 * (it may change with the deletion).
+			 */
+			ptrval = _db_readptr(db, db->chainoff);
+
+			/*
+			 * Append new index and data records to end of files.
+			 */
+			_db_writedat(db, data, 0, SEEK_END);
+			_db_writeidx(db, key, 0, SEEK_END, ptrval);
+
+			/*
+			 * New record goes to the front of the hash chain.
+			 */
+			_db_writeptr(db, db->chainoff, db->idxoff);
+			db->cnt_stor3++;
+		} else {
+			/*
+			 * Same size data, just replace data record.
+			 */
+			_db_writedat(db, data, db->datoff, SEEK_SET);
+			db->cnt_stor4++;
+		}
+	}
+	rc = 0;		/* OK */
+
+doreturn:	/* unlock hash chain locked by _db_find_and_lock */
+	if (un_lock(db->idxfd, db->chainoff, SEEK_SET, 1) < 0)
+		err_dump("db_store: un_lock error");
+	return(rc);
+}
+
+/*
+ * Try to find a free index record and accompanying data record
+ * of the correct sizes.  We're only called by db_store.
+ */
+static int
+_db_findfree(DB *db, int keylen, int datlen)
+{
+	int		rc;
+	off_t	offset, nextoffset, saveoffset;
+
+	/*
+	 * Lock the free list.
+	 */
+	if (writew_lock(db->idxfd, FREE_OFF, SEEK_SET, 1) < 0)
+		err_dump("_db_findfree: writew_lock error");
+
+	/*
+	 * Read the free list pointer.
+	 */
+	saveoffset = FREE_OFF;
+	offset = _db_readptr(db, saveoffset);
+
+	while (offset != 0) {
+		nextoffset = _db_readidx(db, offset);
+		if (strlen(db->idxbuf) == keylen && db->datlen == datlen)
+			break;		/* found a match */
+		saveoffset = offset;
+		offset = nextoffset;
+	}
+
+	if (offset == 0) {
+		rc = -1;	/* no match found */
+	} else {
+		/*
+		 * Found a free record with matching sizes.
+		 * The index record was read in by _db_readidx above,
+		 * which sets db->ptrval.  Also, saveoffset points to
+		 * the chain ptr that pointed to this empty record on
+		 * the free list.  We set this chain ptr to db->ptrval,
+		 * which removes the empty record from the free list.
+		 */
+		_db_writeptr(db, saveoffset, db->ptrval);
+		rc = 0;
+
+		/*
+		 * Notice also that _db_readidx set both db->idxoff
+		 * and db->datoff.  This is used by the caller, db_store,
+		 * to write the new index record and data record.
+		 */
+	}
+
+	/*
+	 * Unlock the free list.
+	 */
+	if (un_lock(db->idxfd, FREE_OFF, SEEK_SET, 1) < 0)
+		err_dump("_db_findfree: un_lock error");
+	return(rc);
+}
+
+/*
+ * Rewind the index file for db_nextrec.
+ * Automatically called by db_open.
+ * Must be called before first db_nextrec.
+ */
+void
+db_rewind(DBHANDLE h)
+{
+	DB		*db = h;
+	off_t	offset;
+
+	offset = (db->nhash + 1) * PTR_SZ;	/* +1 for free list ptr */
+
+	/*
+	 * We're just setting the file offset for this process
+	 * to the start of the index records; no need to lock.
+	 * +1 below for newline at end of hash table.
+	 */
+	if ((db->idxoff = lseek(db->idxfd, offset+1, SEEK_SET)) == -1)
+		err_dump("db_rewind: lseek error");
+}
+
+/*
+ * Return the next sequential record.
+ * We just step our way through the index file, ignoring deleted
+ * records.  db_rewind must be called before this function is
+ * called the first time.
+ */
+char *
+db_nextrec(DBHANDLE h, char *key)
+{
+	DB		*db = h;
+	char	c;
+	char	*ptr;
+
+	/*
+	 * We read lock the free list so that we don't read
+	 * a record in the middle of its being deleted.
+	 */
+	if (readw_lock(db->idxfd, FREE_OFF, SEEK_SET, 1) < 0)
+		err_dump("db_nextrec: readw_lock error");
+
+	do {
+		/*
+		 * Read next sequential index record.
+		 */
+		if (_db_readidx(db, 0) < 0) {
+			ptr = NULL;		/* end of index file, EOF */
+			goto doreturn;
+		}
+
+		/*
+		 * Check if key is all blank (empty record).
+		 */
+		ptr = db->idxbuf;
+		while ((c = *ptr++) != 0  &&  c == SPACE)
+			;	/* skip until null byte or nonblank */
+	} while (c == 0);	/* loop until a nonblank key is found */
+
+	if (key != NULL)
+		strcpy(key, db->idxbuf);	/* return key */
+	ptr = _db_readdat(db);	/* return pointer to data buffer */
+	db->cnt_nextrec++;
+
+doreturn:
+	if (un_lock(db->idxfd, FREE_OFF, SEEK_SET, 1) < 0)
+		err_dump("db_nextrec: un_lock error");
+	return(ptr);
+}
+```
+
+- 多进程并发访问需要的对记录加锁的功能
+
+## 第21章　与网络打印机通信
+
+- 一般使用网络打印协议(IPP)与打印机通信
+- 打印假脱机守护进程将作业发送到打印机
+- 命令行程序将打印作业提交到假脱机守护进程
+
+### 21.2 网络打印机协议
+
+- IPP建立在超文本传输协议HTTP之上，HTTP又建立在TCP/IP之上
+
+### 21.3 HTTP
+
+### 21.4 打印假脱机技术
+
+- IPP首部的结构
+
+  - ```c++
+    struct ipp_hdr {
+    	int8_t  major_version;	/* always 1 */
+    	int8_t  minor_version;	/* always 1 */
+    	union {
+    		int16_t op;	/* operation ID */
+    		int16_t st;	/* status */
+    	} u;
+    	int32_t request_id;		/* request ID */
+    	char    attr_group[1];	/* start of optional attributes group */
+    	/* optional data follows */
+    };
+    
+    ```
+
+- printreq结构和printresp结构定义了print程序和打印脱机守护进程之间的协议
+
+- 返回的字符串放在静态缓冲区中，该缓冲区会被紧接着的调用覆盖，不能用于多线程程序
+
+- ```c++
+  /*
+   * Print server daemon.
+   */
+  #include "apue.h"
+  #include <fcntl.h>
+  #include <dirent.h>
+  #include <ctype.h>
+  #include <pwd.h>
+  #include <pthread.h>
+  #include <strings.h>
+  #include <sys/select.h>
+  #include <sys/uio.h>
+  
+  #include "print.h"
+  #include "ipp.h"
+  
+  /*
+   * These are for the HTTP response from the printer.
+   */
+  #define HTTP_INFO(x)	((x) >= 100 && (x) <= 199)
+  #define HTTP_SUCCESS(x) ((x) >= 200 && (x) <= 299)
+  
+  /*
+   * Describes a print job.
+   */
+  struct job {
+  	struct job      *next;		/* next in list */
+  	struct job      *prev;		/* previous in list */
+  	int32_t          jobid;		/* job ID */
+  	struct printreq  req;		/* copy of print request */
+  };
+  
+  /*
+   * Describes a thread processing a client request.
+   */
+  struct worker_thread {
+  	struct worker_thread  *next;	/* next in list */
+  	struct worker_thread  *prev;	/* previous in list */
+  	pthread_t              tid;		/* thread ID */
+  	int                    sockfd;	/* socket */
+  };
+  
+  /*
+   * Needed for logging.
+   */
+  int					log_to_stderr = 0;
+  
+  /*
+   * Printer-related stuff.
+   */
+  struct addrinfo		*printer;
+  char					*printer_name;
+  pthread_mutex_t		configlock = PTHREAD_MUTEX_INITIALIZER;
+  int					reread;
+  
+  /*
+   * Thread-related stuff.
+   */
+  struct worker_thread	*workers;
+  pthread_mutex_t		workerlock = PTHREAD_MUTEX_INITIALIZER;
+  sigset_t				mask;
+  
+  /*
+   * Job-related stuff.
+   */
+  struct job				*jobhead, *jobtail;
+  int					jobfd;
+  int32_t				nextjob;
+  pthread_mutex_t		joblock = PTHREAD_MUTEX_INITIALIZER;
+  pthread_cond_t			jobwait = PTHREAD_COND_INITIALIZER;
+  
+  /*
+   * Function prototypes.
+   */
+  void		init_request(void);
+  void		init_printer(void);
+  void		update_jobno(void);
+  int32_t	get_newjobno(void);
+  void		add_job(struct printreq *, int32_t);
+  void		replace_job(struct job *);
+  void		remove_job(struct job *);
+  void		build_qonstart(void);
+  void		*client_thread(void *);
+  void		*printer_thread(void *);
+  void		*signal_thread(void *);
+  ssize_t	readmore(int, char **, int, int *);
+  int		printer_status(int, struct job *);
+  void		add_worker(pthread_t, int);
+  void		kill_workers(void);
+  void		client_cleanup(void *);
+  
+  /*
+   * Main print server thread.  Accepts connect requests from
+   * clients and spawns additional threads to service requests.
+   *
+   * LOCKING: none.
+   */
+  int
+  main(int argc, char *argv[])
+  {
+  	pthread_t			tid;
+  	struct addrinfo		*ailist, *aip;
+  	int					sockfd, err, i, n, maxfd;
+  	char				*host;
+  	fd_set				rendezvous, rset;
+  	struct sigaction	sa;
+  	struct passwd		*pwdp;
+  
+  	if (argc != 1)
+  		err_quit("usage: printd");
+  	daemonize("printd");
+  
+  	sigemptyset(&sa.sa_mask);
+  	sa.sa_flags = 0;
+  	sa.sa_handler = SIG_IGN;
+  	if (sigaction(SIGPIPE, &sa, NULL) < 0)
+  		log_sys("sigaction failed");
+  	sigemptyset(&mask);
+  	sigaddset(&mask, SIGHUP);
+  	sigaddset(&mask, SIGTERM);
+  	if ((err = pthread_sigmask(SIG_BLOCK, &mask, NULL)) != 0)
+  		log_sys("pthread_sigmask failed");
+  
+  	n = sysconf(_SC_HOST_NAME_MAX);
+  	if (n < 0)	/* best guess */
+  		n = HOST_NAME_MAX;
+  	if ((host = malloc(n)) == NULL)
+  		log_sys("malloc error");
+  	if (gethostname(host, n) < 0)
+  		log_sys("gethostname error");
+  
+  	if ((err = getaddrlist(host, "print", &ailist)) != 0) {
+  		log_quit("getaddrinfo error: %s", gai_strerror(err));
+  		exit(1);
+  	}
+  	FD_ZERO(&rendezvous);
+  	maxfd = -1;
+  	for (aip = ailist; aip != NULL; aip = aip->ai_next) {
+  		if ((sockfd = initserver(SOCK_STREAM, aip->ai_addr,
+  		  aip->ai_addrlen, QLEN)) >= 0) {
+  			FD_SET(sockfd, &rendezvous);
+  			if (sockfd > maxfd)
+  				maxfd = sockfd;
+  		}
+  	}
+  	if (maxfd == -1)
+  		log_quit("service not enabled");
+  
+  	pwdp = getpwnam(LPNAME);
+  	if (pwdp == NULL)
+  		log_sys("can't find user %s", LPNAME);
+  	if (pwdp->pw_uid == 0)
+  		log_quit("user %s is privileged", LPNAME);
+  	if (setgid(pwdp->pw_gid) < 0 || setuid(pwdp->pw_uid) < 0)
+  		log_sys("can't change IDs to user %s", LPNAME);
+  
+  	init_request();
+  	init_printer();
+  
+  	err = pthread_create(&tid, NULL, printer_thread, NULL);
+  	if (err == 0)
+  		err = pthread_create(&tid, NULL, signal_thread, NULL);
+  	if (err != 0)
+  		log_exit(err, "can't create thread");
+  	build_qonstart();
+  
+  	log_msg("daemon initialized");
+  
+  	for (;;) {
+  		rset = rendezvous;
+  		if (select(maxfd+1, &rset, NULL, NULL, NULL) < 0)
+  			log_sys("select failed");
+  		for (i = 0; i <= maxfd; i++) {
+  			if (FD_ISSET(i, &rset)) {
+  				/*
+  				 * Accept the connection and handle the request.
+  				 */
+  				if ((sockfd = accept(i, NULL, NULL)) < 0)
+  					log_ret("accept failed");
+  				pthread_create(&tid, NULL, client_thread,
+  				  (void *)((long)sockfd));
+  			}
+  		}
+  	}
+  	exit(1);
+  }
+  
+  /*
+   * Initialize the job ID file.  Use a record lock to prevent
+   * more than one printer daemon from running at a time.
+   *
+   * LOCKING: none, except for record-lock on job ID file.
+   */
+  void
+  init_request(void)
+  {
+  	int		n;
+  	char	name[FILENMSZ];
+  
+  	sprintf(name, "%s/%s", SPOOLDIR, JOBFILE);
+  	jobfd = open(name, O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
+  	if (write_lock(jobfd, 0, SEEK_SET, 0) < 0)
+  		log_quit("daemon already running");
+  
+  	/*
+  	 * Reuse the name buffer for the job counter.
+  	 */
+  	if ((n = read(jobfd, name, FILENMSZ)) < 0)
+  		log_sys("can't read job file");
+  	if (n == 0)
+  		nextjob = 1;
+  	else
+  		nextjob = atol(name);
+  }
+  
+  /*
+   * Initialize printer information from configuration file.
+   *
+   * LOCKING: none.
+   */
+  void
+  init_printer(void)
+  {
+  	printer = get_printaddr();
+  	if (printer == NULL)
+  		exit(1);	/* message already logged */
+  	printer_name = printer->ai_canonname;
+  	if (printer_name == NULL)
+  		printer_name = "printer";
+  	log_msg("printer is %s", printer_name);
+  }
+  
+  /*
+   * Update the job ID file with the next job number.
+   * Doesn't handle wrap-around of job number.
+   *
+   * LOCKING: none.
+   */
+  void
+  update_jobno(void)
+  {
+  	char	buf[32];
+  
+  	if (lseek(jobfd, 0, SEEK_SET) == -1)
+  		log_sys("can't seek in job file");
+  	sprintf(buf, "%d", nextjob);
+  	if (write(jobfd, buf, strlen(buf)) < 0)
+  		log_sys("can't update job file");
+  }
+  
+  /*
+   * Get the next job number.
+   *
+   * LOCKING: acquires and releases joblock.
+   */
+  int32_t
+  get_newjobno(void)
+  {
+  	int32_t	jobid;
+  
+  	pthread_mutex_lock(&joblock);
+  	jobid = nextjob++;
+  	if (nextjob <= 0)
+  		nextjob = 1;
+  	pthread_mutex_unlock(&joblock);
+  	return(jobid);
+  }
+  
+  /*
+   * Add a new job to the list of pending jobs.  Then signal
+   * the printer thread that a job is pending.
+   *
+   * LOCKING: acquires and releases joblock.
+   */
+  void
+  add_job(struct printreq *reqp, int32_t jobid)
+  {
+  	struct job	*jp;
+  
+  	if ((jp = malloc(sizeof(struct job))) == NULL)
+  		log_sys("malloc failed");
+  	memcpy(&jp->req, reqp, sizeof(struct printreq));
+  	jp->jobid = jobid;
+  	jp->next = NULL;
+  	pthread_mutex_lock(&joblock);
+  	jp->prev = jobtail;
+  	if (jobtail == NULL)
+  		jobhead = jp;
+  	else
+  		jobtail->next = jp;
+  	jobtail = jp;
+  	pthread_mutex_unlock(&joblock);
+  	pthread_cond_signal(&jobwait);
+  }
+  
+  /*
+   * Replace a job back on the head of the list.
+   *
+   * LOCKING: acquires and releases joblock.
+   */
+  void
+  replace_job(struct job *jp)
+  {
+  	pthread_mutex_lock(&joblock);
+  	jp->prev = NULL;
+  	jp->next = jobhead;
+  	if (jobhead == NULL)
+  		jobtail = jp;
+  	else
+  		jobhead->prev = jp;
+  	jobhead = jp;
+  	pthread_mutex_unlock(&joblock);
+  }
+  
+  /*
+   * Remove a job from the list of pending jobs.
+   *
+   * LOCKING: caller must hold joblock.
+   */
+  void
+  remove_job(struct job *target)
+  {
+  	if (target->next != NULL)
+  		target->next->prev = target->prev;
+  	else
+  		jobtail = target->prev;
+  	if (target->prev != NULL)
+  		target->prev->next = target->next;
+  	else
+  		jobhead = target->next;
+  }
+  
+  /*
+   * Check the spool directory for pending jobs on start-up.
+   *
+   * LOCKING: none.
+   */
+  void
+  build_qonstart(void)
+  {
+  	int				fd, err, nr;
+  	int32_t			jobid;
+  	DIR				*dirp;
+  	struct dirent	*entp;
+  	struct printreq	req;
+  	char			dname[FILENMSZ], fname[FILENMSZ];
+  
+  	sprintf(dname, "%s/%s", SPOOLDIR, REQDIR);
+  	if ((dirp = opendir(dname)) == NULL)
+  		return;
+  	while ((entp = readdir(dirp)) != NULL) {
+  		/*
+  		 * Skip "." and ".."
+  		 */
+  		if (strcmp(entp->d_name, ".") == 0 ||
+  		  strcmp(entp->d_name, "..") == 0)
+  			continue;
+  
+  		/*
+  		 * Read the request structure.
+  		 */
+  		sprintf(fname, "%s/%s/%s", SPOOLDIR, REQDIR, entp->d_name);
+  		if ((fd = open(fname, O_RDONLY)) < 0)
+  			continue;
+  		nr = read(fd, &req, sizeof(struct printreq));
+  		if (nr != sizeof(struct printreq)) {
+  			if (nr < 0)
+  				err = errno;
+  			else
+  				err = EIO;
+  			close(fd);
+  			log_msg("build_qonstart: can't read %s: %s",
+  			  fname, strerror(err));
+  			unlink(fname);
+  			sprintf(fname, "%s/%s/%s", SPOOLDIR, DATADIR,
+  			  entp->d_name);
+  			unlink(fname);
+  			continue;
+  		}
+  		jobid = atol(entp->d_name);
+  		log_msg("adding job %d to queue", jobid);
+  		add_job(&req, jobid);
+  	}
+  	closedir(dirp);
+  }
+  
+  /*
+   * Accept a print job from a client.
+   *
+   * LOCKING: none.
+   */
+  void *
+  client_thread(void *arg)
+  {
+  	int					n, fd, sockfd, nr, nw, first;
+  	int32_t				jobid;
+  	pthread_t			tid;
+  	struct printreq		req;
+  	struct printresp	res;
+  	char				name[FILENMSZ];
+  	char				buf[IOBUFSZ];
+  
+  	tid = pthread_self();
+  	pthread_cleanup_push(client_cleanup, (void *)((long)tid));
+  	sockfd = (long)arg;
+  	add_worker(tid, sockfd);
+  
+  	/*
+  	 * Read the request header.
+  	 */
+  	if ((n = treadn(sockfd, &req, sizeof(struct printreq), 10)) !=
+  	  sizeof(struct printreq)) {
+  		res.jobid = 0;
+  		if (n < 0)
+  			res.retcode = htonl(errno);
+  		else
+  			res.retcode = htonl(EIO);
+  		strncpy(res.msg, strerror(res.retcode), MSGLEN_MAX);
+  		writen(sockfd, &res, sizeof(struct printresp));
+  		pthread_exit((void *)1);
+  	}
+  	req.size = ntohl(req.size);
+  	req.flags = ntohl(req.flags);
+  
+  	/*
+  	 * Create the data file.
+  	 */
+  	jobid = get_newjobno();
+  	sprintf(name, "%s/%s/%d", SPOOLDIR, DATADIR, jobid);
+  	fd = creat(name, FILEPERM);
+  	if (fd < 0) {
+  		res.jobid = 0;
+  		res.retcode = htonl(errno);
+  		log_msg("client_thread: can't create %s: %s", name,
+  		  strerror(res.retcode));
+  		strncpy(res.msg, strerror(res.retcode), MSGLEN_MAX);
+  		writen(sockfd, &res, sizeof(struct printresp));
+  		pthread_exit((void *)1);
+  	}
+  
+  	/*
+  	 * Read the file and store it in the spool directory.
+  	 * Try to figure out if the file is a PostScript file
+  	 * or a plain text file.
+  	 */
+  	first = 1;
+  	while ((nr = tread(sockfd, buf, IOBUFSZ, 20)) > 0) {
+  		if (first) {
+  			first = 0;
+  			if (strncmp(buf, "%!PS", 4) != 0)
+  				req.flags |= PR_TEXT;
+  		}
+  		nw = write(fd, buf, nr);
+  		if (nw != nr) {
+  			res.jobid = 0;
+  			if (nw < 0)
+  				res.retcode = htonl(errno);
+  			else
+  				res.retcode = htonl(EIO);
+  			log_msg("client_thread: can't write %s: %s", name,
+  			  strerror(res.retcode));
+  			close(fd);
+  			strncpy(res.msg, strerror(res.retcode), MSGLEN_MAX);
+  			writen(sockfd, &res, sizeof(struct printresp));
+  			unlink(name);
+  			pthread_exit((void *)1);
+  		}
+  	}
+  	close(fd);
+  
+  	/*
+  	 * Create the control file.  Then write the
+  	 * print request information to the control
+  	 * file.
+  	 */
+  	sprintf(name, "%s/%s/%d", SPOOLDIR, REQDIR, jobid);
+  	fd = creat(name, FILEPERM);
+  	if (fd < 0) {
+  		res.jobid = 0;
+  		res.retcode = htonl(errno);
+  		log_msg("client_thread: can't create %s: %s", name,
+  		  strerror(res.retcode));
+  		strncpy(res.msg, strerror(res.retcode), MSGLEN_MAX);
+  		writen(sockfd, &res, sizeof(struct printresp));
+  		sprintf(name, "%s/%s/%d", SPOOLDIR, DATADIR, jobid);
+  		unlink(name);
+  		pthread_exit((void *)1);
+  	}
+  	nw = write(fd, &req, sizeof(struct printreq));
+  	if (nw != sizeof(struct printreq)) {
+  		res.jobid = 0;
+  		if (nw < 0)
+  			res.retcode = htonl(errno);
+  		else
+  			res.retcode = htonl(EIO);
+  		log_msg("client_thread: can't write %s: %s", name,
+  		  strerror(res.retcode));
+  		close(fd);
+  		strncpy(res.msg, strerror(res.retcode), MSGLEN_MAX);
+  		writen(sockfd, &res, sizeof(struct printresp));
+  		unlink(name);
+  		sprintf(name, "%s/%s/%d", SPOOLDIR, DATADIR, jobid);
+  		unlink(name);
+  		pthread_exit((void *)1);
+  	}
+  	close(fd);
+  
+  	/*
+  	 * Send response to client.
+  	 */
+  	res.retcode = 0;
+  	res.jobid = htonl(jobid);
+  	sprintf(res.msg, "request ID %d", jobid);
+  	writen(sockfd, &res, sizeof(struct printresp));
+  
+  	/*
+  	 * Notify the printer thread, clean up, and exit.
+  	 */
+  	log_msg("adding job %d to queue", jobid);
+  	add_job(&req, jobid);
+  	pthread_cleanup_pop(1);
+  	return((void *)0);
+  }
+  
+  /*
+   * Add a worker to the list of worker threads.
+   *
+   * LOCKING: acquires and releases workerlock.
+   */
+  void
+  add_worker(pthread_t tid, int sockfd)
+  {
+  	struct worker_thread	*wtp;
+  
+  	if ((wtp = malloc(sizeof(struct worker_thread))) == NULL) {
+  		log_ret("add_worker: can't malloc");
+  		pthread_exit((void *)1);
+  	}
+  	wtp->tid = tid;
+  	wtp->sockfd = sockfd;
+  	pthread_mutex_lock(&workerlock);
+  	wtp->prev = NULL;
+  	wtp->next = workers;
+  	if (workers == NULL)
+  		workers = wtp;
+  	else
+  		workers->prev = wtp;
+  	pthread_mutex_unlock(&workerlock);
+  }
+  
+  /*
+   * Cancel (kill) all outstanding workers.
+   *
+   * LOCKING: acquires and releases workerlock.
+   */
+  void
+  kill_workers(void)
+  {
+  	struct worker_thread	*wtp;
+  
+  	pthread_mutex_lock(&workerlock);
+  	for (wtp = workers; wtp != NULL; wtp = wtp->next)
+  		pthread_cancel(wtp->tid);
+  	pthread_mutex_unlock(&workerlock);
+  }
+  
+  /*
+   * Cancellation routine for the worker thread.
+   *
+   * LOCKING: acquires and releases workerlock.
+   */
+  void
+  client_cleanup(void *arg)
+  {
+  	struct worker_thread	*wtp;
+  	pthread_t				tid;
+  
+  	tid = (pthread_t)((long)arg);
+  	pthread_mutex_lock(&workerlock);
+  	for (wtp = workers; wtp != NULL; wtp = wtp->next) {
+  		if (wtp->tid == tid) {
+  			if (wtp->next != NULL)
+  				wtp->next->prev = wtp->prev;
+  			if (wtp->prev != NULL)
+  				wtp->prev->next = wtp->next;
+  			else
+  				workers = wtp->next;
+  			break;
+  		}
+  	}
+  	pthread_mutex_unlock(&workerlock);
+  	if (wtp != NULL) {
+  		close(wtp->sockfd);
+  		free(wtp);
+  	}
+  }
+  
+  /*
+   * Deal with signals.
+   *
+   * LOCKING: acquires and releases configlock.
+   */
+  void *
+  signal_thread(void *arg)
+  {
+  	int		err, signo;
+  
+  	for (;;) {
+  		err = sigwait(&mask, &signo);
+  		if (err != 0)
+  			log_quit("sigwait failed: %s", strerror(err));
+  		switch (signo) {
+  		case SIGHUP:
+  			/*
+  			 * Schedule to re-read the configuration file.
+  			 */
+  			pthread_mutex_lock(&configlock);
+  			reread = 1;
+  			pthread_mutex_unlock(&configlock);
+  			break;
+  
+  		case SIGTERM:
+  			kill_workers();
+  			log_msg("terminate with signal %s", strsignal(signo));
+  			exit(0);
+  
+  		default:
+  			kill_workers();
+  			log_quit("unexpected signal %d", signo);
+  		}
+  	}
+  }
+  
+  /*
+   * Add an option to the IPP header.
+   *
+   * LOCKING: none.
+   */
+  char *
+  add_option(char *cp, int tag, char *optname, char *optval)
+  {
+  	int		n;
+  	union {
+  		int16_t s;
+  		char c[2];
+  	}		u;
+  
+  	*cp++ = tag;
+  	n = strlen(optname);
+  	u.s = htons(n);
+  	*cp++ = u.c[0];
+  	*cp++ = u.c[1];
+  	strcpy(cp, optname);
+  	cp += n;
+  	n = strlen(optval);
+  	u.s = htons(n);
+  	*cp++ = u.c[0];
+  	*cp++ = u.c[1];
+  	strcpy(cp, optval);
+  	return(cp + n);
+  }
+  
+  /*
+   * Single thread to communicate with the printer.
+   *
+   * LOCKING: acquires and releases joblock and configlock.
+   */
+  void *
+  printer_thread(void *arg)
+  {
+  	struct job		*jp;
+  	int				hlen, ilen, sockfd, fd, nr, nw, extra;
+  	char			*icp, *hcp, *p;
+  	struct ipp_hdr	*hp;
+  	struct stat		sbuf;
+  	struct iovec	iov[2];
+  	char			name[FILENMSZ];
+  	char			hbuf[HBUFSZ];
+  	char			ibuf[IBUFSZ];
+  	char			buf[IOBUFSZ];
+  	char			str[64];
+  	struct timespec	ts = { 60, 0 };		/* 1 minute */
+  
+  	for (;;) {
+  		/*
+  		 * Get a job to print.
+  		 */
+  		pthread_mutex_lock(&joblock);
+  		while (jobhead == NULL) {
+  			log_msg("printer_thread: waiting...");
+  			pthread_cond_wait(&jobwait, &joblock);
+  		}
+  		remove_job(jp = jobhead);
+  		log_msg("printer_thread: picked up job %d", jp->jobid);
+  		pthread_mutex_unlock(&joblock);
+  		update_jobno();
+  
+  		/*
+  		 * Check for a change in the config file.
+  		 */
+  		pthread_mutex_lock(&configlock);
+  		if (reread) {
+  			freeaddrinfo(printer);
+  			printer = NULL;
+  			printer_name = NULL;
+  			reread = 0;
+  			pthread_mutex_unlock(&configlock);
+  			init_printer();
+  		} else {
+  			pthread_mutex_unlock(&configlock);
+  		}
+  
+  		/*
+  		 * Send job to printer.
+  		 */
+  		sprintf(name, "%s/%s/%d", SPOOLDIR, DATADIR, jp->jobid);
+  		if ((fd = open(name, O_RDONLY)) < 0) {
+  			log_msg("job %d canceled - can't open %s: %s",
+  			  jp->jobid, name, strerror(errno));
+  			free(jp);
+  			continue;
+  		}
+  		if (fstat(fd, &sbuf) < 0) {
+  			log_msg("job %d canceled - can't fstat %s: %s",
+  			  jp->jobid, name, strerror(errno));
+  			free(jp);
+  			close(fd);
+  			continue;
+  		}
+  		if ((sockfd = connect_retry(AF_INET, SOCK_STREAM, 0,
+  		  printer->ai_addr, printer->ai_addrlen)) < 0) {
+  			log_msg("job %d deferred - can't contact printer: %s",
+  			  jp->jobid, strerror(errno));
+  			goto defer;
+  		}
+  
+  		/*
+  		 * Set up the IPP header.
+  		 */
+  		icp = ibuf;
+  		hp = (struct ipp_hdr *)icp;
+  		hp->major_version = 1;
+  		hp->minor_version = 1;
+  		hp->operation = htons(OP_PRINT_JOB);
+  		hp->request_id = htonl(jp->jobid);
+  		icp += offsetof(struct ipp_hdr, attr_group);
+  		*icp++ = TAG_OPERATION_ATTR;
+  		icp = add_option(icp, TAG_CHARSET, "attributes-charset",
+  		  "utf-8");
+  		icp = add_option(icp, TAG_NATULANG,
+  		  "attributes-natural-language", "en-us");
+  		sprintf(str, "http://%s/ipp", printer_name);
+  		icp = add_option(icp, TAG_URI, "printer-uri", str);
+  		icp = add_option(icp, TAG_NAMEWOLANG,
+  		  "requesting-user-name", jp->req.usernm);
+  		icp = add_option(icp, TAG_NAMEWOLANG, "job-name",
+  		  jp->req.jobnm);
+  		if (jp->req.flags & PR_TEXT) {
+  			p = "text/plain";
+  			extra = 1;
+  		} else {
+  			p = "application/postscript";
+  			extra = 0;
+  		}
+  		icp = add_option(icp, TAG_MIMETYPE, "document-format", p);
+  		*icp++ = TAG_END_OF_ATTR;
+  		ilen = icp - ibuf;
+  
+  		/*
+  		 * Set up the HTTP header.
+  		 */
+  		hcp = hbuf;
+  		sprintf(hcp, "POST /ipp HTTP/1.1\r\n");
+  		hcp += strlen(hcp);
+  		sprintf(hcp, "Content-Length: %ld\r\n",
+  		  (long)sbuf.st_size + ilen + extra);
+  		hcp += strlen(hcp);
+  		strcpy(hcp, "Content-Type: application/ipp\r\n");
+  		hcp += strlen(hcp);
+  		sprintf(hcp, "Host: %s:%d\r\n", printer_name, IPP_PORT);
+  		hcp += strlen(hcp);
+  		*hcp++ = '\r';
+  		*hcp++ = '\n';
+  		hlen = hcp - hbuf;
+  
+  		/*
+  		 * Write the headers first.  Then send the file.
+  		 */
+  		iov[0].iov_base = hbuf;
+  		iov[0].iov_len = hlen;
+  		iov[1].iov_base = ibuf;
+  		iov[1].iov_len = ilen;
+  		if (writev(sockfd, iov, 2) != hlen + ilen) {
+  			log_ret("can't write to printer");
+  			goto defer;
+  		}
+  
+  		if (jp->req.flags & PR_TEXT) {
+  			/*
+  			 * Hack: allow PostScript to be printed as plain text.
+  			 */
+  			if (write(sockfd, "\b", 1) != 1) {
+  				log_ret("can't write to printer");
+  				goto defer;
+  			}
+  		}
+  
+  		while ((nr = read(fd, buf, IOBUFSZ)) > 0) {
+  			if ((nw = writen(sockfd, buf, nr)) != nr) {
+  				if (nw < 0)
+  				  log_ret("can't write to printer");
+  				else
+  				  log_msg("short write (%d/%d) to printer", nw, nr);
+  				goto defer;
+  			}
+  		}
+  		if (nr < 0) {
+  			log_ret("can't read %s", name);
+  			goto defer;
+  		}
+  
+  		/*
+  		 * Read the response from the printer.
+  		 */
+  		if (printer_status(sockfd, jp)) {
+  			unlink(name);
+  			sprintf(name, "%s/%s/%d", SPOOLDIR, REQDIR, jp->jobid);
+  			unlink(name);
+  			free(jp);
+  			jp = NULL;
+  		}
+  defer:
+  		close(fd);
+  		if (sockfd >= 0)
+  			close(sockfd);
+  		if (jp != NULL) {
+  			replace_job(jp);
+  			nanosleep(&ts, NULL);
+  		}
+  	}
+  }
+  
+  /*
+   * Read data from the printer, possibly increasing the buffer.
+   * Returns offset of end of data in buffer or -1 on failure.
+   *
+   * LOCKING: none.
+   */
+  ssize_t
+  readmore(int sockfd, char **bpp, int off, int *bszp)
+  {
+  	ssize_t	nr;
+  	char	*bp = *bpp;
+  	int		bsz = *bszp;
+  
+  	if (off >= bsz) {
+  		bsz += IOBUFSZ;
+  		if ((bp = realloc(*bpp, bsz)) == NULL)
+  			log_sys("readmore: can't allocate bigger read buffer");
+  		*bszp = bsz;
+  		*bpp = bp;
+  	}
+  	if ((nr = tread(sockfd, &bp[off], bsz-off, 1)) > 0)
+  		return(off+nr);
+  	else
+  		return(-1);
+  }
+  
+  /*
+   * Read and parse the response from the printer.  Return 1
+   * if the request was successful, and 0 otherwise.
+   *
+   * LOCKING: none.
+   */
+  int
+  printer_status(int sfd, struct job *jp)
+  {
+  	int				i, success, code, len, found, bufsz, datsz;
+  	int32_t			jobid;
+  	ssize_t			nr;
+  	char			*bp, *cp, *statcode, *reason, *contentlen;
+  	struct ipp_hdr	*hp;
+  
+  	/*
+  	 * Read the HTTP header followed by the IPP response header.
+  	 * They can be returned in multiple read attempts.  Use the
+  	 * Content-Length specifier to determine how much to read.
+  	 */
+  	success = 0;
+  	bufsz = IOBUFSZ;
+  	if ((bp = malloc(IOBUFSZ)) == NULL)
+  		log_sys("printer_status: can't allocate read buffer");
+  
+  	while ((nr = tread(sfd, bp, bufsz, 5)) > 0) {
+  		/*
+  		 * Find the status.  Response starts with "HTTP/x.y"
+  		 * so we can skip the first 8 characters.
+  		 */
+  		cp = bp + 8;
+  		datsz = nr;
+  		while (isspace((int)*cp))
+  			cp++;
+  		statcode = cp;
+  		while (isdigit((int)*cp))
+  			cp++;
+  		if (cp == statcode) { /* Bad format; log it and move on */
+  			log_msg(bp);
+  		} else {
+  			*cp++ = '\0';
+  			reason = cp;
+  			while (*cp != '\r' && *cp != '\n')
+  				cp++;
+  			*cp = '\0';
+  			code = atoi(statcode);
+  			if (HTTP_INFO(code))
+  				continue;
+  			if (!HTTP_SUCCESS(code)) { /* probable error: log it */
+  				bp[datsz] = '\0';
+  				log_msg("error: %s", reason);
+  				break;
+  			}
+  
+  			/*
+  			 * HTTP request was okay, but still need to check
+  			 * IPP status.  Search for the Content-Length.
+  			 */
+  			i = cp - bp;
+  			for (;;) {
+  				while (*cp != 'C' && *cp != 'c' && i < datsz) {
+  					cp++;
+  					i++;
+  				}
+  				if (i >= datsz) {	/* get more header */
+  					if ((nr = readmore(sfd, &bp, i, &bufsz)) < 0) {
+  						goto out;
+  					} else {
+  						cp = &bp[i];
+  						datsz += nr;
+  					}
+  				}
+  
+  				if (strncasecmp(cp, "Content-Length:", 15) == 0) {
+  					cp += 15;
+  					while (isspace((int)*cp))
+  						cp++;
+  					contentlen = cp;
+  					while (isdigit((int)*cp))
+  						cp++;
+  					*cp++ = '\0';
+  					i = cp - bp;
+  					len = atoi(contentlen);
+  					break;
+  				} else {
+  					cp++;
+  					i++;
+  				}
+  			}
+  			if (i >= datsz) {	/* get more header */
+  				if ((nr = readmore(sfd, &bp, i, &bufsz)) < 0) {
+  					goto out;
+  				} else {
+  					cp = &bp[i];
+  					datsz += nr;
+  				}
+  			}
+  
+  			found = 0;
+  			while (!found) {  /* look for end of HTTP header */
+  				while (i < datsz - 2) {
+  					if (*cp == '\n' && *(cp + 1) == '\r' &&
+  					  *(cp + 2) == '\n') {
+  						found = 1;
+  						cp += 3;
+  						i += 3;
+  						break;
+  					}
+  					cp++;
+  					i++;
+  				}
+  				if (i >= datsz) {	/* get more header */
+  					if ((nr = readmore(sfd, &bp, i, &bufsz)) < 0) {
+  						goto out;
+  					} else {
+  						cp = &bp[i];
+  						datsz += nr;
+  					}
+  				}
+  			}
+  
+  			if (datsz - i < len) {	/* get more header */
+  				if ((nr = readmore(sfd, &bp, i, &bufsz)) < 0) {
+  					goto out;
+  				} else {
+  					cp = &bp[i];
+  					datsz += nr;
+  				}
+  			}
+  
+  			hp = (struct ipp_hdr *)cp;
+  			i = ntohs(hp->status);
+  			jobid = ntohl(hp->request_id);
+  
+  			if (jobid != jp->jobid) {
+  				/*
+  				 * Different jobs.  Ignore it.
+  				 */
+  				log_msg("jobid %d status code %d", jobid, i);
+  				break;
+  			}
+  
+  			if (STATCLASS_OK(i))
+  				success = 1;
+  			break;
+  		}
+  	}
+  
+  out:
+  	free(bp);
+  	if (nr < 0) {
+  		log_msg("jobid %d: error reading printer response: %s",
+  		  jobid, strerror(errno));
+  	}
+  	return(success);
+  }
+  ```
+
+- 
+
+  

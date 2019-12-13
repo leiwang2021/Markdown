@@ -606,3 +606,161 @@
 
 - 争用的锁会成为系统的瓶颈
 - 加锁粒度用来描述加锁保护的数据规模
+
+## 第10章　内核同步方法
+
+### 10.1 原子操作
+
+- 原子操作就是不能被分割的指令
+
+- 内核提供了两组原子操作接口: 一组针对整数进行操作，另一组针对单独的位进行操作
+
+- 原子整数操作
+
+  - 针对整数的原子操作只能对atomic_t类型的数据进行处理
+
+  - ```c++
+    typedef struct{
+        volatile int counter;
+    } atomic_t;
+    ```
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 17-14-09.png)
+
+  - 原子操作通常是内联函数，往往通过内嵌汇编指令来实现，如果某个函数本身就是原子的，那么它往往会被定义成一个宏
+  - 原子操作只保证原子性，顺序性通过屏障指令来实施
+  - 能使用原子操作时，就尽量不要使用复杂的加锁机制
+
+- 64位原子操作
+
+  - ```c++
+    typedef struct{
+        volatile long counter;
+    }atomic64_t;
+    ```
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 17-20-28.png)
+
+- 原子位操作
+
+  - 位操作函数是对普通的内存地址进行操作的，它的参数是一个指针和一个位号
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 17-23-32.png)
+
+  - 非原子位操作
+
+### 10.2 自旋锁
+
+- 自旋锁(spin lock),最多只能被一个可执行线程持有，如果一个执行线程试图获得一个被已经持有的自旋锁，那么该线程就会一直进行忙循环-旋转-等待锁重新可用，特别浪费处理器时间
+
+- 让请求线程睡眠，直到锁可用时再唤醒它，这样处理器不必循环等待，但是有两次明显的上下文切换，信号量提供了这种机制
+
+- 自旋锁方法
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 18-42-48.png)
+
+  - Linux内核实现的自旋锁是不可递归的
+  - 自旋锁可用使用在中断处理程序中，一定要在获取锁之前，首先禁止本地中断
+
+- 其他针对自旋锁的操作
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 18-53-06.png)
+
+- 自旋锁和下半部
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 18-57-19.png)
+
+### 10.3 读-写自旋锁
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 18-59-12.png)
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-11 19-00-49.png)
+- 如果加锁时间不长并且代码不会睡眠，利用自旋锁是最佳选择。如果加锁时间可能很长或者代码在持有锁时有可能睡眠，最好使用信号量来完成加锁功能
+
+### 10.4 信号量
+
+- Linux中的信号量是一种睡眠锁，如果一个任务试图获得一个不可用的信号量时，信号量会将其推进一个等待队列，然后让其睡眠，当持有的信号量可用后，处于等待队列中的那个任务将被唤醒
+- 信号量和自旋锁的差异
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 14-56-26.png)
+
+- 不会禁止内核抢占，持有信号量的代码可以被抢占
+- 计数信号量和二值信号量
+  - 二值信号量，互斥信号量，一个时刻仅允许一个锁持有者
+  - 计数信号量，一个时刻至多有count个锁持有者
+- 创建和初始化信号量
+  - struct semaphore类型用来表示信号量
+- 使用信号量
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 15-05-02.png)
+
+### 10.5 读-写信号量
+
+- 读写信号量在内核中是由rw_semaphore结构表示的
+- 所有读-写锁的睡眠都不会被信号打断
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 15-07-48.png)
+
+### 10.6 互斥体
+
+- 互斥体指的是任何可以睡眠的强制互斥锁
+- mutex在内核中对应数据结构mutex,其行为和使用计数为1的信号量类似，但是操作接口更简单，实现更高效，使用限制更强
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 15-12-32.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 15-15-01.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 15-17-54.png)
+
+### 10.7 完成变量
+
+- 完成变量由completion表示，如果一个任务要执行一些工作时，另一个任务就会在完成变量上等待，当这个任务完成工作后，会使用完成变量去唤醒在等待的任务
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 15-22-49.png)
+
+### 10.8 BLK:大内核锁
+
+### 10.9 顺序锁
+
+- seq锁，实现这种锁主要依靠一个序列计数器，当有疑义的数据被写入时，会得到一个锁，并且序列值会增加
+- jiffies,该变量存储了Linux机器启动到当前的时间
+
+### 10.10 禁止抢占
+
+- 如果一个自旋锁被持有，内核便不能进行抢占
+- 可以通过preempt_disabkl禁止内核抢占，每次调用都必须有一个相应的preempt_enbale调用
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 15-52-40.png)
+
+### 10.11　顺序和屏障
+
+- 编译器和处理器为了提高效率，可能对读和写重新排序
+- 屏障: 可以指示编译器不要给定点周围的指令序列进行重新排序，确保顺序
+- rmb提高了一个读内存屏障，在rmb之前的载入操作不会被重新排列在该调用之后，在rmb之后的载入操作不会被重新排列在该调用之前
+- wmb提高了一个写内存屏障
+- mb既提高了读屏障也提供了写屏障
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 16-01-20.png)
+
+## 第11章　定时器和时间管理
+
+- 系统定时器是一种可编程芯片，它能以固定频率产生中断，该中断就是定时器中断，它所对应的中断处理程序负责更新系统时间，也负责执行需要周期性运行的任务。系统定时器和时钟中断处理程序是Linux系统内核管理机制中的中枢
+
+### 11.1 内核中的时间概念
+
+- 内核靠已知的时钟中断间隔来计算墙上时间和系统运行时间
+
+### 11.2 节拍率: HZ
+
+- 节拍率有一个HZ频率，一个周期为1/HZ秒，x86上时钟中断的频率为100HZ
+- 理想的HZ值
+  - 更高的时钟中断解析度可提高时间驱动时间的解析度
+- 高HZ的优势
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 16-29-11.png)
+
+- 高HZ的劣势
+  - 节拍率越高，时钟中断频率越高，系统负担也越重，处理器必须花时间来执行时钟中断处理程序
+- Linux内核支持"无节拍操作"选项，当编译内核时设置了CONFIG_HZ配置选项，系统就根据这个选项动态调度时钟中断
+
+### 11.3 jiffies
+
+- 全局变量jiffies用来记录自系统启动以来产生的节拍的总数，无符号长整型
+- jiffies的内部表示
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 16-38-39.png)
+
+- jiffies的回绕
+  - 如果节拍数达到了最大值后还要继续增加的话，它的值会回绕到0
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 16-42-03.png)
+
+- 用户空间和HZ
+  - 内核定义了USER_HZ来代表用户空间看到的HZ值，为100,可以使用jiffies_to_clock_t()将一个由HZ表示的节拍计数器转换成一个由USER_HZ表示的节拍计数
