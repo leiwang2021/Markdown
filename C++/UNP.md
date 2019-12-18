@@ -4368,6 +4368,2171 @@ Udp_server(const char *host, const char *serv, socklen_t *addrlenp)
     }
     ```
 
-    
+## 第19章　密钥管理套接字
 
+- 通用密钥管理API, 可用于IPsec和其他网络安全服务，该API也创建了一个新的协议族即PF_KEY域，唯一支持的一种套接字是原始套接字，仅限超级用户有打开的权利
+- IPsec基于安全关联SA为分组提供安全服务
+- 存放在一个系统中的所有SA构成的集合称为安全关联数据库SADB
+- 安全策略数据库SPDB描述分组流通的需求
+- 密钥管理套接字支持3种类型的操作
+  - 通过写出到密钥管理套接字，进程可以往内核以及打开着密钥管理套接字的所有其他进程发送消息
+  - 通过请求从密钥管理套接字读入，进程可以自内核(或其他进程)接收消息
+  - 进程可以往内核发送一个倾泄请求消息，得到SADB
+
+### 19.2 读和写
+
+- 密钥管理消息首部，sadb_msg
+
+- ```c++
+  struct sadb_msg{
+      u_int8_t sadb_msg_version;
+      u_int8_t sadb_msg_type;
+      u_int8_t sadb_msg_errno;
+      u_int8_t sadb_msg_satype;
+      u_int16_t sadb_msg_len;
+      u_int16_t sadb_msg_reserved;
+      u_int32_t sadb_msg_seq;
+      u_int32_t sadb_msg_pid;
+      }
+  ```
+
+- 每个sadb_msg首部将后跟零个或多个扩展
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 10-32-51.png)
+
+### 19.3 倾泄安全关联数据库
+
+- SADB_DUMP消息倾泻出当前的SADB,不需要任何扩展，单纯是16字节的sadb_msg首部
+
+- SA类型
+
+- ```c++
+  #include "unp.h"
+  #include <net/pfkeyv2.h>
   
+  /* include sadb_dump */
+  void
+  sadb_dump(int type)
+  {
+  	int s;
+  	char buf[4096];
+  	struct sadb_msg msg;
+  	int goteof;
+  
+  	s = Socket(PF_KEY, SOCK_RAW, PF_KEY_V2);
+  
+  	/* Build and write SADB_DUMP request */
+  	bzero(&msg, sizeof(msg));
+  	msg.sadb_msg_version = PF_KEY_V2;
+  	msg.sadb_msg_type = SADB_DUMP;
+  	msg.sadb_msg_satype = type;
+  	msg.sadb_msg_len = sizeof(msg) / 8;
+  	msg.sadb_msg_pid = getpid();
+  	printf("Sending dump message:\n");
+  	print_sadb_msg(&msg, sizeof(msg));
+  	Write(s, &msg, sizeof(msg));
+  
+  	printf("\nMessages returned:\n");
+  	/* Read and print SADB_DUMP replies until done */
+  	goteof = 0;
+  	while (goteof == 0) {
+  		int msglen;
+  		struct sadb_msg *msgp;
+  
+  		msglen = Read(s, &buf, sizeof(buf));
+  		msgp = (struct sadb_msg *)&buf;
+  		print_sadb_msg(msgp, msglen);
+  		if (msgp->sadb_msg_seq == 0)
+  			goteof = 1;
+  	}
+  	close(s);
+  }
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int satype = SADB_SATYPE_UNSPEC;
+  	int c;
+  
+  	opterr = 0;		/* don't want getopt() writing to stderr */
+  	while ( (c = getopt(argc, argv, "t:")) != -1) {
+  		switch (c) {
+  		case 't':
+  			if ((satype = getsatypebyname(optarg)) == -1)
+  				err_quit("invalid -t option %s", optarg);
+  			break;
+  
+  		default:
+  			err_quit("unrecognized option: %c", c);
+  		}
+  	}
+  
+  	sadb_dump(satype);
+  }
+  /* end sadb_dump */
+  ```
+
+### 19.4 创建静态安全关联
+
+- SADB_ADD消息
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 10-35-56.png)
+
+-  安全参数索引SPI结合目的地址和所用协议唯一标识一个SA
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 10-41-02.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 10-41-23.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 10-44-36.png)
+
+- sadb_address结构后跟合适地址族的sockaddr结构
+- 密钥本身则紧跟在sadb_key结构之后
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 10-47-19.png)
+
+- 应答消息被发送到所有PF_KEY套接字，然而不同的套接字可能属于不同的保护域，密钥数据不应该跨越保护域
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 11-01-08.png)
+
+- ```c++
+  #include "unp.h"
+  #include <net/pfkeyv2.h>
+  
+  int
+  salen(struct sockaddr *sa)
+  {
+  #ifdef HAVE_SOCKADDR_SA_LEN
+  	return sa->sa_len;
+  #else
+  	switch (sa->sa_family) {
+  	case AF_INET:
+  		return sizeof(struct sockaddr_in);
+  #ifdef IPV6
+  	case AF_INET6:
+  		return sizeof(struct sockaddr_in6);
+  #endif
+  	default:
+  		return 0;	/* XXX */
+  	}
+  #endif
+  }
+  
+  int
+  prefix_all(struct sockaddr *sa)
+  {
+  	switch (sa->sa_family) {
+  	case AF_INET:
+  		return 32;
+  #ifdef IPV6
+  	case AF_INET6:
+  		return 128;
+  #endif
+  	default:
+  		return 0;	/* XXX */
+  	}
+  }
+  
+  /* include sadb_add */
+  void
+  sadb_add(struct sockaddr *src, struct sockaddr *dst, int type, int alg,
+  		int spi, int keybits, unsigned char *keydata)
+  {
+  	int s;
+  	char buf[4096], *p;	/* XXX */
+  	struct sadb_msg *msg;
+  	struct sadb_sa *saext;
+  	struct sadb_address *addrext;
+  	struct sadb_key *keyext;
+  	int len;
+  	int mypid;
+  
+  	s = Socket(PF_KEY, SOCK_RAW, PF_KEY_V2);
+  
+  	mypid = getpid();
+  
+  	/* Build and write SADB_ADD request */
+  	bzero(&buf, sizeof(buf));
+  	p = buf;
+  	msg = (struct sadb_msg *)p;
+  	msg->sadb_msg_version = PF_KEY_V2;
+  	msg->sadb_msg_type = SADB_ADD;
+  	msg->sadb_msg_satype = type;
+  	msg->sadb_msg_pid = getpid();
+  	len = sizeof(*msg);
+  	p += sizeof(*msg);
+  	 
+  	saext = (struct sadb_sa *)p;
+  	saext->sadb_sa_len = sizeof(*saext) / 8;
+  	saext->sadb_sa_exttype = SADB_EXT_SA;
+  	saext->sadb_sa_spi = htonl(spi);
+  	saext->sadb_sa_replay = 0;	/* no replay protection with static keys */
+  	saext->sadb_sa_state = SADB_SASTATE_MATURE;
+  	saext->sadb_sa_auth = alg;
+  	saext->sadb_sa_encrypt = SADB_EALG_NONE;
+  	saext->sadb_sa_flags = 0;
+  	len += saext->sadb_sa_len * 8;
+  	p += saext->sadb_sa_len * 8;
+  
+  	addrext = (struct sadb_address *)p;
+  	addrext->sadb_address_len = (sizeof(*addrext) + salen(src) + 7) / 8;
+  	addrext->sadb_address_exttype = SADB_EXT_ADDRESS_SRC;
+  	addrext->sadb_address_proto = 0;	/* any protocol */
+  	addrext->sadb_address_prefixlen = prefix_all(src);
+  	addrext->sadb_address_reserved = 0;
+  	memcpy(addrext + 1, src, salen(src));
+  	len += addrext->sadb_address_len * 8;
+  	p += addrext->sadb_address_len * 8;
+  	 
+  	addrext = (struct sadb_address *)p;
+  	addrext->sadb_address_len = (sizeof(*addrext) + salen(dst) + 7) / 8;
+  	addrext->sadb_address_exttype = SADB_EXT_ADDRESS_DST;
+  	addrext->sadb_address_proto = 0;	/* any protocol */
+  	addrext->sadb_address_prefixlen = prefix_all(dst);
+  	addrext->sadb_address_reserved = 0;
+  	memcpy(addrext + 1, dst, salen(dst));
+  	len += addrext->sadb_address_len * 8;
+  	p += addrext->sadb_address_len * 8;
+  
+  	keyext = (struct sadb_key *)p;
+  	/* "+7" handles alignment requirements */
+  	keyext->sadb_key_len = (sizeof(*keyext) + (keybits / 8) + 7) / 8;
+  	keyext->sadb_key_exttype = SADB_EXT_KEY_AUTH;
+  	keyext->sadb_key_bits = keybits;
+  	keyext->sadb_key_reserved = 0;
+  	memcpy(keyext + 1, keydata, keybits / 8);
+  	len += keyext->sadb_key_len * 8;
+  	p += keyext->sadb_key_len * 8;
+  	 
+  	msg->sadb_msg_len = len / 8;
+  	printf("Sending add message:\n");
+  	print_sadb_msg(buf, len);
+  	Write(s, buf, len);
+  
+  	printf("\nReply returned:\n");
+  	/* Read and print SADB_ADD reply, discarding any others */
+  	for (;;) {
+  		int msglen;
+  		struct sadb_msg *msgp;
+  
+  		msglen = Read(s, &buf, sizeof(buf));
+  		msgp = (struct sadb_msg *)&buf;
+  		if (msgp->sadb_msg_pid == mypid &&
+  			msgp->sadb_msg_type == SADB_ADD) {
+  			print_sadb_msg(msgp, msglen);
+  			break;
+  		}
+  	}
+  	close(s);
+  }
+  /* end sadb_add */
+  
+  int
+  main(int argc, char **argv)
+  {
+  	struct addrinfo hints, *src, *dst;
+  	unsigned char *p, *keydata, *kp;
+  	char *ep;
+  	int ret, len, i;
+  	int satype, alg, keybits;
+  
+  	bzero(&hints, sizeof(hints));
+  	if ((ret = getaddrinfo(argv[1], NULL, &hints, &src)) != 0) {
+  		err_quit("%s: %s\n", argv[1], gai_strerror(ret));
+  	}
+  	if ((ret = getaddrinfo(argv[2], NULL, &hints, &dst)) != 0) {
+  		err_quit("%s: %s\n", argv[2], gai_strerror(ret));
+  	}
+  	if (src->ai_family != dst->ai_family) {
+  		err_quit("%s and %s not same addr family\n", argv[1], argv[2]);
+  	}
+  	satype = SADB_SATYPE_AH;
+  	if ((alg = getsaalgbyname(satype, argv[3])) < 0) {
+  		err_quit("Unknown SA type / algorithm pair ah/%s\n", argv[3]);
+  	}
+  	keybits = strtoul(argv[4], &ep, 0);
+  	if (ep == argv[4] || *ep != '\0' || (keybits % 8) != 0) {
+  		err_quit("Invalid number of bits %s\n", argv[4]);
+  	}
+  	p = argv[5];
+  	if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X'))
+  		p += 2;
+  	len = strlen(p);
+  	kp = keydata = malloc(keybits / 8);
+  	for (i = 0; i < keybits; i += 8) {
+  		int c;
+  
+  		if (len < 2) {
+  			err_quit("%s: not enough bytes (expected %d)\n", argv[5], keybits / 8);
+  		}
+  		if (sscanf(p, "%2x", &c) != 1) {
+  			err_quit("%s contains invalid hex digit\n", argv[5]);
+  		}
+  		*kp++ = c;
+  		p += 2;
+  		len -= 2;
+  	}
+  	if (len > 0) {
+  		err_quit("%s: too many bytes (expected %d)\n", argv[5], keybits / 8);
+  	}
+  	sadb_add(src->ai_addr, dst->ai_addr, satype, alg, 0x9876, keybits, keydata);
+  }
+  ```
+
+### 19.5 动态维护安全关联
+
+- 周期性地重新产生密钥有助于进一步提高安全性
+- 密钥管理守护进程预先使用SADB_REGISTER请求消息向内核注册自身，在相应的SADB_REGISTER应答消息中，内核提供一个受支持算法扩展，指出哪些加密和/或认证机制及密钥长度得到支持
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 11-08-02.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 11-08-24.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 11-18-45.png)
+
+- ```c++
+  #include "unp.h"
+  #include <net/pfkeyv2.h>
+  
+  /* include sadb_register */
+  void
+  sadb_register(int type)
+  {
+  	int s;
+  	char buf[4096];	/* XXX */
+  	struct sadb_msg msg;
+  	int goteof;
+  	int mypid;
+  
+  	s = Socket(PF_KEY, SOCK_RAW, PF_KEY_V2);
+  
+  	mypid = getpid();
+  
+  	/* Build and write SADB_REGISTER request */
+  	bzero(&msg, sizeof(msg));
+  	msg.sadb_msg_version = PF_KEY_V2;
+  	msg.sadb_msg_type = SADB_REGISTER;
+  	msg.sadb_msg_satype = type;
+  	msg.sadb_msg_len = sizeof(msg) / 8;
+  	msg.sadb_msg_pid = mypid;
+  	printf("Sending register message:\n");
+  	print_sadb_msg(&msg, sizeof(msg));
+  	Write(s, &msg, sizeof(msg));
+  
+  	printf("\nReply returned:\n");
+  	/* Read and print SADB_REGISTER reply, discarding any others */
+  	for (;;) {
+  		int msglen;
+  		struct sadb_msg *msgp;
+  
+  		msglen = Read(s, &buf, sizeof(buf));
+  		msgp = (struct sadb_msg *)&buf;
+  		if (msgp->sadb_msg_pid == mypid &&
+  			msgp->sadb_msg_type == SADB_REGISTER) {
+  			print_sadb_msg(msgp, msglen);
+  			break;
+  		}
+  	}
+  	close(s);
+  }
+  /* end sadb_register */
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int satype = SADB_SATYPE_UNSPEC;
+  	int c;
+  
+  	opterr = 0;		/* don't want getopt() writing to stderr */
+  	while ( (c = getopt(argc, argv, "t:")) != -1) {
+  		switch (c) {
+  		case 't':
+  			if ((satype = getsatypebyname(optarg)) == -1)
+  				err_quit("invalid -t option %s", optarg);
+  			break;
+  
+  		default:
+  			err_quit("unrecognized option: %c", c);
+  		}
+  	}
+  
+  	if (satype == SADB_SATYPE_UNSPEC) {
+  		err_quit("must specify SA type");
+  	}
+  
+  	sadb_register(satype);
+  }
+  ```
+
+- 密钥管理套接字用于在内核、密钥管理守护进程以及诸如路由守护进程等安全服务消费进程之间交换SA。SA既可以手工静态安装，也可以使用密钥协商协议自动动态安装
+- 每个由进程发送的消息被内核回射到所有其他打开着的密钥管理套接字，不过任何含有敏感数据的扩展会被抹除
+
+## 第20章　广播
+
+- 不同的寻址方式
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 11-26-34.png)
+
+- 广播的用途
+  - 在本地子网定位一个服务器主机，资源发现
+  - 在有多个客户主机与单个服务器主机通信的局域网环境中尽量减少分组流通
+    - ARP, 使用链路层广播
+    - DHCP
+    - NTP, 网络时间协议
+    - 路由守护进程，在一个局域网上广播自己的路由表
+
+### 20.2 广播地址
+
+- 子网定向广播地址: {子网ID, -1},通常路由器不转发这种广播
+- 受限广播地址: {-1,-1}或255.255.255.255, 路由器从不转发目的地址为255.255.255.255的IP数据报。该地址用于主机配置过程中IP数据报的目的地址，此时，主机可能还不知道它所在网络的子网掩码。这样的数据报仅出现在本地网络中
+
+### 20.3 单播和广播的比较
+
+- 单播IP数据报仅由通过目的IP地址指定的单个主机接收，子网上的其他主机都不受任何影响
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 12-52-48.png)
+
+- 子网定向广播地址映射成全为1的以太网地址，使得子网上的每一个以太网接口都接收该帧
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 12-55-14.png)
+
+- 如果中间的主机没有任何应用进程绑定UDP端口520,该主机的UDP代码于是丢弃这个已收取的数据报，不能发送一个ICMP端口不可达消息
+- 广播存在的根本问题: 子网上未参加相应广播应用的所有主机也不得不沿协议栈一路向上完整的处理收取的UDP广播数据报，直到丢弃为止
+
+### 20.4 使用广播的dg_cli函数
+
+- 通过设置SO_BROADCAST套接字选项允许发送广播数据报
+
+- ```c++
+  #include	"unp.h"
+  
+  static void	recvfrom_alarm(int);
+  
+  void
+  dg_cli(FILE *fp, int sockfd, const SA *pservaddr, socklen_t servlen)
+  {
+  	int				n;
+  	const int		on = 1;
+  	char			sendline[MAXLINE], recvline[MAXLINE + 1];
+  	socklen_t		len;
+  	struct sockaddr	*preply_addr;
+   
+  	preply_addr = Malloc(servlen);
+  
+  	Setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+  
+  	Signal(SIGALRM, recvfrom_alarm);
+  
+  	while (Fgets(sendline, MAXLINE, fp) != NULL) {
+  
+  		Sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+  
+  		alarm(5);
+  		for ( ; ; ) {
+  			len = servlen;
+  			n = recvfrom(sockfd, recvline, MAXLINE, 0, preply_addr, &len);
+  			if (n < 0) {
+  				if (errno == EINTR)
+  					break;		/* waited long enough for replies */
+  				else
+  					err_sys("recvfrom error");
+  			} else {
+  				recvline[n] = 0;	/* null terminate */
+  				printf("from %s: %s",
+  						Sock_ntop_host(preply_addr, len), recvline);
+  			}
+  		}
+  	}
+  	free(preply_addr);
+  }
+  
+  static void
+  recvfrom_alarm(int signo)
+  {
+  	return;		/* just interrupt the recvfrom() */
+  }
+  ```
+
+- 广播数据报的目的主机是包括发送主机在内的接入同一个子网的所有主机，所有应答数据报都是单播的
+
+- 某些内核不允许对广播数据报执行分片，如果其大小超过外出接口的MTU,发送它的系统调用就返回EMSGSIZE错误，使用SIOCGIFMTU ioctl确定外出接口的MTU
+
+### 20.5 竞争状态
+
+- 当多个进程访问共享的数据
+
+- 当涉及信号处理时，信号会在程序执行过程中由内核随时随地递交
+
+- 尽管我们的意图是让信号处理函数中断某个阻塞中的recvfrom,然而信号却可以在任何时刻被递交，当它被递交时，我们可能在无限for循环中的任何地方执行
+
+- 阻塞和解阻塞信号(不正确方法)
+
+  - 如果SIGALRM信号恰在recvfrom返回最后一个应答数据报之后与接着阻塞该信号之间递交，那么下一次调用recvfrom将永远阻塞
+
+  - ```c++
+    #include	"unp.h"
+    
+    static void	recvfrom_alarm(int);
+    
+    void
+    dg_cli(FILE *fp, int sockfd, const SA *pservaddr, socklen_t servlen)
+    {
+    	int				n;
+    	const int		on = 1;
+    	char			sendline[MAXLINE], recvline[MAXLINE + 1];
+    	sigset_t		sigset_alrm;
+    	socklen_t		len;
+    	struct sockaddr	*preply_addr;
+     
+    	preply_addr = Malloc(servlen);
+    
+    	Setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+    
+    	Sigemptyset(&sigset_alrm);
+    	Sigaddset(&sigset_alrm, SIGALRM);
+    
+    	Signal(SIGALRM, recvfrom_alarm);
+    
+    	while (Fgets(sendline, MAXLINE, fp) != NULL) {
+    
+    		Sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+    
+    		alarm(5);
+    		for ( ; ; ) {
+    			len = servlen;
+    			Sigprocmask(SIG_UNBLOCK, &sigset_alrm, NULL);
+    			n = recvfrom(sockfd, recvline, MAXLINE, 0, preply_addr, &len);
+    			Sigprocmask(SIG_BLOCK, &sigset_alrm, NULL);
+    			if (n < 0) {
+    				if (errno == EINTR)
+    					break;		/* waited long enough for replies */
+    				else
+    					err_sys("recvfrom error");
+    			} else {
+    				recvline[n] = 0;	/* null terminate */
+    				printf("from %s: %s",
+    						Sock_ntop_host(preply_addr, len), recvline);
+    			}
+    		}
+    	}
+    	free(preply_addr);
+    }
+    
+    static void
+    recvfrom_alarm(int signo)
+    {
+    	return;		/* just interrupt the recvfrom() */
+    }
+    ```
+
+- 用pselect阻塞和解阻塞信号
+
+  - pselect的关键点在于: 设置信号掩码、测试描述符、恢复信号掩码这3个操作在调用进程看来自成原子操作
+
+  - ```c++
+    #include	"unp.h"
+    
+    static void	recvfrom_alarm(int);
+    
+    void
+    dg_cli(FILE *fp, int sockfd, const SA *pservaddr, socklen_t servlen)
+    {
+    	int				n;
+    	const int		on = 1;
+    	char			sendline[MAXLINE], recvline[MAXLINE + 1];
+    	fd_set			rset;
+    	sigset_t		sigset_alrm, sigset_empty;
+    	socklen_t		len;
+    	struct sockaddr	*preply_addr;
+     
+    	preply_addr = Malloc(servlen);
+    
+    	Setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+    
+    	FD_ZERO(&rset);
+    
+    	Sigemptyset(&sigset_empty);
+    	Sigemptyset(&sigset_alrm);
+    	Sigaddset(&sigset_alrm, SIGALRM);
+    
+    	Signal(SIGALRM, recvfrom_alarm);
+    
+    	while (Fgets(sendline, MAXLINE, fp) != NULL) {
+    		Sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+    
+    		Sigprocmask(SIG_BLOCK, &sigset_alrm, NULL);
+    		alarm(5);
+    		for ( ; ; ) {
+    			FD_SET(sockfd, &rset);
+    			n = pselect(sockfd+1, &rset, NULL, NULL, NULL, &sigset_empty);
+    			if (n < 0) {
+    				if (errno == EINTR)
+    					break;
+    				else
+    					err_sys("pselect error");
+    			} else if (n != 1)
+    				err_sys("pselect error: returned %d", n);
+    
+    			len = servlen;
+    			n = Recvfrom(sockfd, recvline, MAXLINE, 0, preply_addr, &len);
+    			recvline[n] = 0;	/* null terminate */
+    			printf("from %s: %s",
+    					Sock_ntop_host(preply_addr, len), recvline);
+    		}
+    	}
+    	free(preply_addr);
+    }
+    
+    static void
+    recvfrom_alarm(int signo)
+    {
+    	return;		/* just interrupt the recvfrom() */
+    }
+    ```
+
+- 使用sigsetjmp和siglpngjmp
+
+  - ```c++
+    #include	"unp.h"
+    #include	<setjmp.h>
+    
+    static void			recvfrom_alarm(int);
+    static sigjmp_buf	jmpbuf;
+    
+    void
+    dg_cli(FILE *fp, int sockfd, const SA *pservaddr, socklen_t servlen)
+    {
+    	int				n;
+    	const int		on = 1;
+    	char			sendline[MAXLINE], recvline[MAXLINE + 1];
+    	socklen_t		len;
+    	struct sockaddr	*preply_addr;
+     
+    	preply_addr = Malloc(servlen);
+    
+    	Setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+    
+    	Signal(SIGALRM, recvfrom_alarm);
+    
+    	while (Fgets(sendline, MAXLINE, fp) != NULL) {
+    
+    		Sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+    
+    		alarm(5);
+    		for ( ; ; ) {
+    			if (sigsetjmp(jmpbuf, 1) != 0)
+    				break;
+    			len = servlen;
+    			n = Recvfrom(sockfd, recvline, MAXLINE, 0, preply_addr, &len);
+    			recvline[n] = 0;	/* null terminate */
+    			printf("from %s: %s",
+    					Sock_ntop_host(preply_addr, len), recvline);
+    		}
+    	}
+    	free(preply_addr);
+    }
+    
+    static void
+    recvfrom_alarm(int signo)
+    {
+    	siglongjmp(jmpbuf, 1);
+    }
+    ```
+
+- 使用从信号处理函数到主控函数的IPC
+
+  - ```c++
+    #include	"unp.h"
+    
+    static void	recvfrom_alarm(int);
+    static int	pipefd[2];
+    
+    void
+    dg_cli(FILE *fp, int sockfd, const SA *pservaddr, socklen_t servlen)
+    {
+    	int				n, maxfdp1;
+    	const int		on = 1;
+    	char			sendline[MAXLINE], recvline[MAXLINE + 1];
+    	fd_set			rset;
+    	socklen_t		len;
+    	struct sockaddr	*preply_addr;
+     
+    	preply_addr = Malloc(servlen);
+    
+    	Setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+    
+    	Pipe(pipefd);
+    	maxfdp1 = max(sockfd, pipefd[0]) + 1;
+    
+    	FD_ZERO(&rset);
+    
+    	Signal(SIGALRM, recvfrom_alarm);
+    
+    	while (Fgets(sendline, MAXLINE, fp) != NULL) {
+    		Sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+    
+    		alarm(5);
+    		for ( ; ; ) {
+    			FD_SET(sockfd, &rset);
+    			FD_SET(pipefd[0], &rset);
+    			if ( (n = select(maxfdp1, &rset, NULL, NULL, NULL)) < 0) {
+    				if (errno == EINTR)
+    					continue;
+    				else
+    					err_sys("select error");
+    			}
+    
+    			if (FD_ISSET(sockfd, &rset)) {
+    				len = servlen;
+    				n = Recvfrom(sockfd, recvline, MAXLINE, 0, preply_addr, &len);
+    				recvline[n] = 0;	/* null terminate */
+    				printf("from %s: %s",
+    						Sock_ntop_host(preply_addr, len), recvline);
+    			}
+    
+    			if (FD_ISSET(pipefd[0], &rset)) {
+    				Read(pipefd[0], &n, 1);		/* timer expired */
+    				break;
+    			}
+    		}
+    	}
+    	free(preply_addr);
+    }
+    
+    static void
+    recvfrom_alarm(int signo)
+    {
+    	Write(pipefd[1], "", 1);	/* write one null byte to pipe */
+    	return;
+    }
+    ```
+
+  - 让信号处理函数使用IPC通知主控函数定时器已到时，select同时测试套接字和管道的可读性
+
+## 第21章　多播
+
+- 多播地址标识一组IP接口，多播数据只应该由对它感兴趣的接口接收，多播既可以用于局域网，也可以跨广域网使用
+- 9个套接字选项
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 14-19-49.png)
+
+### 21.2 多播地址
+
+- IPv4的D类地址
+
+  - IPV4的D类地址，从224.0.0.0 到239.255.255.255是IPv4多播地址
+  - 224.0.0.1是所有主机组，子网上所有具备多播能力的节点必须在所有具备多播能力的接口上加入该组
+  - 224.0.0.2 是所有路由器组，子网上所有多播路由器必须在所有具备多播能力的接口上加入该组
+  - 其余的为链路局部的多播地址，多播路由器从不转发以这些为目的地址的数据报
+
+- IPv6多播地址
+
+  - IPv6多播地址的高序字节值为ff
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 14-31-40.png)
+
+  - ff01::1和ff02::1是所有节点组，子网上所有具备多播能力的节点必须在所有具备多播能力的接口上加入该组
+  - ff01::2  ff02::2和ff05::2是所有路由器组
+
+- 多播地址的范围
+
+  - IPv6多播地址显式存在一个4位的范围字段
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 14-37-52.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 14-39-36.png)
+
+  - 接口局部数据报不准由接口输出，链路局部数据报不可由路由器转发
+
+- 多播会话: 一个多播地址和一个传输层端口的组合称为一个一个会话
+
+### 21.3 局域网上多播和广播的比较
+
+- 接收应用进程需要加入多播组，发送应用进程不必为此加入多播组
+- 当我们告知一个以太网接口接收目的地址为某个特定以太网组地址的帧时，以太网接口对这个地址应用某个散列函数，当有一个目的地为某个组地址的帧在线缆上经过时，接口对齐目的地址应用同样的散列函数
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 14-57-29.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 14-58-20.png)
+
+### 21.4 广域网上的多播
+
+- 当某个主机上的一个进程加入一个多播组时，该主机向所有直接连接的多播路由器发送一个IGMP消息，告知它们本主机已加入了那个多播组，多播路由器随后使用MRP交换这些信息
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 15-05-48.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 15-09-18.png)
+
+### 21.5 源特定多播
+
+- 源特定多播SSM把应用系统的源地址结合到组地址上
+
+### 21.6 多播套接字选项
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 15-14-31.png)
+
+- IP_ADD_MEMBERSHIP、IPV6_JOIN_GROUP MCAST_JOIN_GROUP
+  - 在一个给定套接字上可以多次加入多播组，不过每次加入的必须是不同的多播地址，或者是在不同接口上的同一个多播地址
+- IP_DROP_MEMBERSHIP  IPV6_LEAVE_GROUP MCAST_LEAVE_GROUP
+  - 离开指定的本地接口上不限源的多播组
+- IP_BLOCK_SOURCE和MCAST_BLOCK_SOURCE
+  - 在本套接字上阻塞接收来自某个源的多播分组
+- IP_UNBLOCK 和MCAST_UNBLOCK_SPURCE
+  - 开通被阻塞的源
+- IP_ADD_SOURCE_MEMBERSHIP和MCAST_JOIN_SOURCE_GROUP
+  - 加入一个特定于源的多播组
+- IP_DROP_SOURCE_MEMBERSHIP和MCAST_LEAVE_SOURCE_GROUP
+  - 离开一个特定于源的多播组
+- IP_MULTICAST_IF和IPV6_MULTICAST_IF
+  - 指定通过本套接字发送的多播数据的外出接口
+- IP_MULTICASTL_TTL和IPV6_MULTICAST_HOPS
+  - 设置跳限，默认为1
+- IP_MULTICAST_LOOP和IPV6_MULTICAST_LOOP
+  - 开启或禁止多播数据报的本地自环
+
+### 21.7 mcast_join和相关函数
+
+- 使用多播的协议无关代码
+
+- mcast_join
+
+  - ```c++
+    /* include mcast_join1 */
+    #include	"unp.h"
+    #include	<net/if.h>
+    
+    int
+    mcast_join(int sockfd, const SA *grp, socklen_t grplen,
+    		   const char *ifname, u_int ifindex)
+    {
+    #ifdef MCAST_JOIN_GROUP
+    	struct group_req req;
+    	if (ifindex > 0) {
+    		req.gr_interface = ifindex;
+    	} else if (ifname != NULL) {
+    		if ( (req.gr_interface = if_nametoindex(ifname)) == 0) {
+    			errno = ENXIO;	/* i/f name not found */
+    			return(-1);
+    		}
+    	} else
+    		req.gr_interface = 0;
+    	if (grplen > sizeof(req.gr_group)) {
+    		errno = EINVAL;
+    		return -1;
+    	}
+    	memcpy(&req.gr_group, grp, grplen);
+    	return (setsockopt(sockfd, family_to_level(grp->sa_family),
+    			MCAST_JOIN_GROUP, &req, sizeof(req)));
+    #else
+    /* end mcast_join1 */
+    
+    /* include mcast_join2 */
+    	switch (grp->sa_family) {
+    	case AF_INET: {
+    		struct ip_mreq		mreq;
+    		struct ifreq		ifreq;
+    
+    		memcpy(&mreq.imr_multiaddr,
+    			   &((const struct sockaddr_in *) grp)->sin_addr,
+    			   sizeof(struct in_addr));
+    
+    		if (ifindex > 0) {
+    			if (if_indextoname(ifindex, ifreq.ifr_name) == NULL) {
+    				errno = ENXIO;	/* i/f index not found */
+    				return(-1);
+    			}
+    			goto doioctl;
+    		} else if (ifname != NULL) {
+    			strncpy(ifreq.ifr_name, ifname, IFNAMSIZ);
+    doioctl:
+    			if (ioctl(sockfd, SIOCGIFADDR, &ifreq) < 0)
+    				return(-1);
+    			memcpy(&mreq.imr_interface,
+    				   &((struct sockaddr_in *) &ifreq.ifr_addr)->sin_addr,
+    				   sizeof(struct in_addr));
+    		} else
+    			mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    
+    		return(setsockopt(sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+    						  &mreq, sizeof(mreq)));
+    	}
+    /* end mcast_join2 */
+    
+    /* include mcast_join3 */
+    #ifdef	IPV6
+    #ifndef	IPV6_JOIN_GROUP		/* APIv0 compatibility */
+    #define	IPV6_JOIN_GROUP		IPV6_ADD_MEMBERSHIP
+    #endif
+    	case AF_INET6: {
+    		struct ipv6_mreq	mreq6;
+    
+    		memcpy(&mreq6.ipv6mr_multiaddr,
+    			   &((const struct sockaddr_in6 *) grp)->sin6_addr,
+    			   sizeof(struct in6_addr));
+    
+    		if (ifindex > 0) {
+    			mreq6.ipv6mr_interface = ifindex;
+    		} else if (ifname != NULL) {
+    			if ( (mreq6.ipv6mr_interface = if_nametoindex(ifname)) == 0) {
+    				errno = ENXIO;	/* i/f name not found */
+    				return(-1);
+    			}
+    		} else
+    			mreq6.ipv6mr_interface = 0;
+    
+    		return(setsockopt(sockfd, IPPROTO_IPV6, IPV6_JOIN_GROUP,
+    						  &mreq6, sizeof(mreq6)));
+    	}
+    #endif
+    
+    	default:
+    		errno = EAFNOSUPPORT;
+    		return(-1);
+    	}
+    #endif
+    }
+    /* end mcast_join3 */
+    
+    void
+    Mcast_join(int sockfd, const SA *grp, socklen_t grplen,
+    		   const char *ifname, u_int ifindex)
+    {
+    	if (mcast_join(sockfd, grp, grplen, ifname, ifindex) < 0)
+    		err_sys("mcast_join error");
+    }
+    
+    int
+    mcast_join_source_group(int sockfd, const SA *src, socklen_t srclen,
+    						const SA *grp, socklen_t grplen,
+    						const char *ifname, u_int ifindex)
+    {
+    #ifdef MCAST_JOIN_SOURCE_GROUP
+    	struct group_source_req req;
+    	if (ifindex > 0) {
+    		req.gsr_interface = ifindex;
+    	} else if (ifname != NULL) {
+    		if ( (req.gsr_interface = if_nametoindex(ifname)) == 0) {
+    			errno = ENXIO;	/* i/f name not found */
+    			return(-1);
+    		}
+    	} else
+    		req.gsr_interface = 0;
+    	if (grplen > sizeof(req.gsr_group) || srclen > sizeof(req.gsr_source)) {
+    		errno = EINVAL;
+    		return -1;
+    	}
+    	memcpy(&req.gsr_group, grp, grplen);
+    	memcpy(&req.gsr_source, src, srclen);
+    	return (setsockopt(sockfd, family_to_level(grp->sa_family),
+    			MCAST_JOIN_SOURCE_GROUP, &req, sizeof(req)));
+    #else
+    	switch (grp->sa_family) {
+    #ifdef IP_ADD_SOURCE_MEMBERSHIP
+    	case AF_INET: {
+    		struct ip_mreq_source	mreq;
+    		struct ifreq			ifreq;
+    
+    		memcpy(&mreq.imr_multiaddr,
+    			   &((struct sockaddr_in *) grp)->sin_addr,
+    			   sizeof(struct in_addr));
+    		memcpy(&mreq.imr_sourceaddr,
+    			   &((struct sockaddr_in *) src)->sin_addr,
+    			   sizeof(struct in_addr));
+    
+    		if (ifindex > 0) {
+    			if (if_indextoname(ifindex, ifreq.ifr_name) == NULL) {
+    				errno = ENXIO;	/* i/f index not found */
+    				return(-1);
+    			}
+    			goto doioctl;
+    		} else if (ifname != NULL) {
+    			strncpy(ifreq.ifr_name, ifname, IFNAMSIZ);
+    doioctl:
+    			if (ioctl(sockfd, SIOCGIFADDR, &ifreq) < 0)
+    				return(-1);
+    			memcpy(&mreq.imr_interface,
+    				   &((struct sockaddr_in *) &ifreq.ifr_addr)->sin_addr,
+    				   sizeof(struct in_addr));
+    		} else
+    			mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    
+    		return(setsockopt(sockfd, IPPROTO_IP, IP_ADD_SOURCE_MEMBERSHIP,
+    						  &mreq, sizeof(mreq)));
+    	}
+    #endif
+    
+    #ifdef	IPV6
+    	case AF_INET6: /* IPv6 source-specific API is MCAST_JOIN_SOURCE_GROUP */
+    #endif
+    	default:
+    		errno = EAFNOSUPPORT;
+    		return(-1);
+    	}
+    #endif
+    }
+    
+    void
+    Mcast_join_source_group(int sockfd, const SA *src, socklen_t srclen,
+    						const SA *grp, socklen_t grplen,
+    						const char *ifname, u_int ifindex)
+    {
+    	if (mcast_join_source_group(sockfd, src, srclen, grp, grplen,
+    								ifname, ifindex) < 0)
+    		err_sys("mcast_join_source_group error");
+    }
+    
+    int
+    mcast_block_source(int sockfd, const SA *src, socklen_t srclen,
+    						const SA *grp, socklen_t grplen)
+    {
+    #ifdef MCAST_BLOCK_SOURCE
+    	struct group_source_req req;
+    	req.gsr_interface = 0;
+    	if (grplen > sizeof(req.gsr_group) || srclen > sizeof(req.gsr_source)) {
+    		errno = EINVAL;
+    		return -1;
+    	}
+    	memcpy(&req.gsr_group, grp, grplen);
+    	memcpy(&req.gsr_source, src, srclen);
+    	return (setsockopt(sockfd, family_to_level(grp->sa_family),
+    			MCAST_BLOCK_SOURCE, &req, sizeof(req)));
+    #else
+    	switch (grp->sa_family) {
+    #ifdef IP_BLOCK_SOURCE
+    	case AF_INET: {
+    		struct ip_mreq_source	mreq;
+    
+    		memcpy(&mreq.imr_multiaddr,
+    			   &((struct sockaddr_in *) grp)->sin_addr,
+    			   sizeof(struct in_addr));
+    		memcpy(&mreq.imr_sourceaddr,
+    			   &((struct sockaddr_in *) src)->sin_addr,
+    			   sizeof(struct in_addr));
+    		mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    
+    		return(setsockopt(sockfd, IPPROTO_IP, IP_BLOCK_SOURCE,
+    						  &mreq, sizeof(mreq)));
+    	}
+    #endif
+    
+    #ifdef	IPV6
+    	case AF_INET6: /* IPv6 source-specific API is MCAST_BLOCK_SOURCE */
+    #endif
+    	default:
+    		errno = EAFNOSUPPORT;
+    		return(-1);
+    	}
+    #endif
+    }
+    
+    void
+    Mcast_block_source(int sockfd, const SA *src, socklen_t srclen,
+    						const SA *grp, socklen_t grplen)
+    {
+    	if (mcast_block_source(sockfd, src, srclen, grp, grplen) < 0)
+    		err_sys("mcast_block_source error");
+    }
+    
+    int
+    mcast_unblock_source(int sockfd, const SA *src, socklen_t srclen,
+    						const SA *grp, socklen_t grplen)
+    {
+    #ifdef MCAST_UNBLOCK_SOURCE
+    	struct group_source_req req;
+    	req.gsr_interface = 0;
+    	if (grplen > sizeof(req.gsr_group) || srclen > sizeof(req.gsr_source)) {
+    		errno = EINVAL;
+    		return -1;
+    	}
+    	memcpy(&req.gsr_group, grp, grplen);
+    	memcpy(&req.gsr_source, src, srclen);
+    	return (setsockopt(sockfd, family_to_level(grp->sa_family),
+    			MCAST_UNBLOCK_SOURCE, &req, sizeof(req)));
+    #else
+    	switch (grp->sa_family) {
+    #ifdef IP_UNBLOCK_SOURCE
+    	case AF_INET: {
+    		struct ip_mreq_source	mreq;
+    
+    		memcpy(&mreq.imr_multiaddr,
+    			   &((struct sockaddr_in *) grp)->sin_addr,
+    			   sizeof(struct in_addr));
+    		memcpy(&mreq.imr_sourceaddr,
+    			   &((struct sockaddr_in *) src)->sin_addr,
+    			   sizeof(struct in_addr));
+    		mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    
+    		return(setsockopt(sockfd, IPPROTO_IP, IP_UNBLOCK_SOURCE,
+    						  &mreq, sizeof(mreq)));
+    	}
+    #endif
+    
+    #ifdef	IPV6
+    	case AF_INET6: /* IPv6 source-specific API is MCAST_UNBLOCK_SOURCE */
+    #endif
+    	default:
+    		errno = EAFNOSUPPORT;
+    		return(-1);
+    	}
+    #endif
+    }
+    
+    void
+    Mcast_unblock_source(int sockfd, const SA *src, socklen_t srclen,
+    						const SA *grp, socklen_t grplen)
+    {
+    	if (mcast_unblock_source(sockfd, src, srclen, grp, grplen) < 0)
+    		err_sys("mcast_unblock_source error");
+    }
+    ```
+
+
+### 21.8 使用多播的dg_cli函数
+
+- 分片数据报对于多播数据报不成问题
+
+
+
+### 21.9 接收IP多播基础设施会话声明
+
+
+
+### 21.10 发送和接收
+
+
+
+### 21.11 SNTP: 简单网络时间协议
+
+
+
+- 多播应用进程一开始就通过设置套接字选项请求加入赋予它的多播组，该请求告知IP层加入给定组，IP层再告知数据链路层接收发往相应硬件多播地址的多播帧，多播利用多数接口卡都提供的硬件过滤减少非期望分组的接收。
+
+## 第22章　高级UDP套接字编程
+
+### 22.2 接收标志、目的IP地址和接口索引
+
+- ```c++
+  /* include recvfrom_flags1 */
+  #include	"unp.h"
+  #include	<sys/param.h>		/* ALIGN macro for CMSG_NXTHDR() macro */
+  
+  ssize_t
+  recvfrom_flags(int fd, void *ptr, size_t nbytes, int *flagsp,
+  			   SA *sa, socklen_t *salenptr, struct unp_in_pktinfo *pktp)
+  {
+  	struct msghdr	msg;
+  	struct iovec	iov[1];
+  	ssize_t			n;
+  
+  #ifdef	HAVE_MSGHDR_MSG_CONTROL
+  	struct cmsghdr	*cmptr;
+  	union {
+  	  struct cmsghdr	cm;
+  	  char				control[CMSG_SPACE(sizeof(struct in_addr)) +
+  								CMSG_SPACE(sizeof(struct unp_in_pktinfo))];
+  	} control_un;
+  
+  	msg.msg_control = control_un.control;
+  	msg.msg_controllen = sizeof(control_un.control);
+  	msg.msg_flags = 0;
+  #else
+  	bzero(&msg, sizeof(msg));	/* make certain msg_accrightslen = 0 */
+  #endif
+  
+  	msg.msg_name = sa;
+  	msg.msg_namelen = *salenptr;
+  	iov[0].iov_base = ptr;
+  	iov[0].iov_len = nbytes;
+  	msg.msg_iov = iov;
+  	msg.msg_iovlen = 1;
+  
+  	if ( (n = recvmsg(fd, &msg, *flagsp)) < 0)
+  		return(n);
+  
+  	*salenptr = msg.msg_namelen;	/* pass back results */
+  	if (pktp)
+  		bzero(pktp, sizeof(struct unp_in_pktinfo));	/* 0.0.0.0, i/f = 0 */
+  /* end recvfrom_flags1 */
+  
+  /* include recvfrom_flags2 */
+  #ifndef	HAVE_MSGHDR_MSG_CONTROL
+  	*flagsp = 0;					/* pass back results */
+  	return(n);
+  #else
+  
+  	*flagsp = msg.msg_flags;		/* pass back results */
+  	if (msg.msg_controllen < sizeof(struct cmsghdr) ||
+  		(msg.msg_flags & MSG_CTRUNC) || pktp == NULL)
+  		return(n);
+  
+  	for (cmptr = CMSG_FIRSTHDR(&msg); cmptr != NULL;
+  		 cmptr = CMSG_NXTHDR(&msg, cmptr)) {
+  
+  #ifdef	IP_RECVDSTADDR
+  		if (cmptr->cmsg_level == IPPROTO_IP &&
+  			cmptr->cmsg_type == IP_RECVDSTADDR) {
+  
+  			memcpy(&pktp->ipi_addr, CMSG_DATA(cmptr),
+  				   sizeof(struct in_addr));
+  			continue;
+  		}
+  #endif
+  
+  #ifdef	IP_RECVIF
+  		if (cmptr->cmsg_level == IPPROTO_IP &&
+  			cmptr->cmsg_type == IP_RECVIF) {
+  			struct sockaddr_dl	*sdl;
+  
+  			sdl = (struct sockaddr_dl *) CMSG_DATA(cmptr);
+  			pktp->ipi_ifindex = sdl->sdl_index;
+  			continue;
+  		}
+  #endif
+  		err_quit("unknown ancillary data, len = %d, level = %d, type = %d",
+  				 cmptr->cmsg_len, cmptr->cmsg_level, cmptr->cmsg_type);
+  	}
+  	return(n);
+  #endif	/* HAVE_MSGHDR_MSG_CONTROL */
+  }
+  /* end recvfrom_flags2 */
+  
+  ssize_t
+  Recvfrom_flags(int fd, void *ptr, size_t nbytes, int *flagsp,
+  			   SA *sa, socklen_t *salenptr, struct unp_in_pktinfo *pktp)
+  {
+  	ssize_t		n;
+  
+  	n = recvfrom_flags(fd, ptr, nbytes, flagsp, sa, salenptr, pktp);
+  	if (n < 0)
+  		err_quit("recvfrom_flags error");
+  
+  	return(n);
+  }
+  ```
+
+### 22.3 数据报截断
+
+- 当到达的一个UDP数据报超过应用进程提供的缓冲区容量时，recvmsg在其msghdr结构的msg_flags成员上设置MSG_TRUNC标志
+
+### 22.4 何时用UDP代替TCP
+
+- UDP支持广播和多播
+- UDP没有连接建立和拆除
+- 对于简单的请求－应答应用程序可以使用UDP,不过错误检测功能必须加到应用程序内部，错误检测至少涉及确认、超时和重传
+- 对于海量数据传输不应该使用UDP
+
+### 22.5 给UDP应用增加可靠性
+
+- 超时和重传: 用于处理丢失的数据报
+- 序列号: 供客户验证一个应答是否匹配相应的请求
+- 通过给每个分组增加一个时间戳并追踪RTT及其平均偏差这两个估算因子，动态地修改重传超时值，还给每个分组增加一个序列号以验证某个给定应答是期望的应答
+
+### 22.6 捆绑接口地址
+
+- 有些应用程序需要知道某个UDP数据报的目的IP地址和接收接口，开启IP_RECVDSTADDR和IP_RECVIF套接字选项可以作为辅助数据随每个数据报返回这些信息
+
+### 22.7 并发UDP服务器
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-17 14-39-00.png)
+
+### 22.8 IPv6分组信息
+
+- sendmsg
+- recvmsg
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 10-30-19.png)
+
+- 设置IPv6_PKTINFO套接字选项
+- 开启IPV6_RECVPKTINFO套接字选项
+- 外出和到达接口
+  - 任何接口都不会被赋予0值索引
+  - 如果ipi6_ifindex成员值为0,那么就由内核选择外出接口
+- 源和目的IPv6地址
+- 指定和接收跳限
+  - IPV6_UNICAST_HOPS
+  - IPV6_MULTICAST_HOPS
+  - 跳限的正常值在0-255之间，若为-1则告知内核使用默认值
+- 指定下一跳地址
+  - IPv6_NEXTHOP辅助数据对象将数据报的下一跳指定为一个套接字地址结构
+- 指定和接收流通类别
+  - IPv6_TCLASS辅助数据对象指定数据报的流通类别
+  - 如果为某个给定分组指定流通类别，那么只需要包含辅助数据，如果为通过某个套接字的所有分组指定流通类别，那么就以一个整数选项值设置IPv6_TCLASS套接字选项
+
+### 22.9 IPv6路径MTU控制
+
+- 以最小MTU发送
+  - IPv6_USE_MIN_MTU套接字选项控制，也可以作为辅助数据发送
+- 接收路径MTU变动指示
+  - 开启IPv6_RECVPATHMTU套接字选项以接收MTU变动通知，本标志值使得任何时候路径MTU发生变动时作为辅助数据由recvmsg返回变动后的路劲MTU
+- 确定当前路径MTU
+  - IPV6_PATHMTU套接字选项确定某个已连接套接字的当前路径MTU
+- 避免分片
+  - IPV6_DONTFRAG套接字选项用于关闭自动分片特性
+
+## 第23章　高级SCTP套接字编程
+
+- SCTP是一个面向消息的协议，递送给用户的是部分的或完整的消息
+- SCTP还提供了从一到多式套接字抽取某个关联并使其成为一到一式套接字的方法，允许构造既可以迭代运行又可以并发运行的服务器程序
+
+### 23.2 自动关闭的一到多式服务器程序
+
+- 自动关闭允许SCTP端点指定某个关联可以保持空闲的最大秒钟数
+- 开启必须显式地使用SCTP_AUTOCLOSE套接字选项
+
+### 23.2 部分递送
+
+- 当应用进程要求SCTP传输过大的消息时，SCTP可能采取部分递送措施
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 11-04-42.png)
+
+- 处理部分递送API
+
+  - ```c++
+    #include	"unp.h"
+    
+    static uint8_t *sctp_pdapi_readbuf=NULL;
+    static int sctp_pdapi_rdbuf_sz=0;
+    
+    
+    uint8_t *
+    pdapi_recvmsg(int sock_fd,
+    	      int *rdlen,
+    	      SA *from,
+    	      int *from_len,
+    	      struct sctp_sndrcvinfo *sri,
+    	      int *msg_flags)
+    {
+    	int rdsz,left,at_in_buf;
+    	int frmlen=0;
+    
+    	if (sctp_pdapi_readbuf == NULL) {
+    		sctp_pdapi_readbuf = (uint8_t *)Malloc(SCTP_PDAPI_INCR_SZ);
+    		sctp_pdapi_rdbuf_sz = SCTP_PDAPI_INCR_SZ;
+    	}
+    	at_in_buf = Sctp_recvmsg(sock_fd, sctp_pdapi_readbuf, sctp_pdapi_rdbuf_sz,
+    				 from, from_len,
+    				 sri,msg_flags);
+    	if(at_in_buf < 1){
+    		*rdlen = at_in_buf;
+    		return(NULL);
+    	}
+    	while((*msg_flags & MSG_EOR) == 0) {
+    		left = sctp_pdapi_rdbuf_sz - at_in_buf;
+    		if(left < SCTP_PDAPI_NEED_MORE_THRESHOLD) {
+    			sctp_pdapi_readbuf = realloc(sctp_pdapi_readbuf, sctp_pdapi_rdbuf_sz+SCTP_PDAPI_INCR_SZ);
+    			if(sctp_pdapi_readbuf == NULL) {
+    				err_quit("sctp_pdapi ran out of memory");
+    			}
+    			sctp_pdapi_rdbuf_sz += SCTP_PDAPI_INCR_SZ;
+    			left = sctp_pdapi_rdbuf_sz - at_in_buf;
+    		}
+    		rdsz = Sctp_recvmsg(sock_fd, &sctp_pdapi_readbuf[at_in_buf], 
+    			     left, NULL, &frmlen, NULL, msg_flags);
+    		at_in_buf += rdsz;
+    	}
+    	*rdlen = at_in_buf;
+    	return(sctp_pdapi_readbuf);
+    }
+    ```
+
+### 23.4 通知
+
+- 应用进程可以预定7个通知
+
+- 通知显示实用函数
+
+  - ```c++
+    #include	"unp.h"
+    
+    void
+    print_notification(char *notify_buf)
+    {
+    	union sctp_notification *snp;
+    	struct sctp_assoc_change *sac;
+    	struct sctp_paddr_change *spc;
+    	struct sctp_remote_error *sre;
+    	struct sctp_send_failed *ssf;
+    	struct sctp_shutdown_event *sse;
+    	struct sctp_adaption_event *ae;
+    	struct sctp_pdapi_event *pdapi;
+    	const char *str;
+    
+    	snp = (union sctp_notification *)notify_buf;
+    	switch(snp->sn_header.sn_type) {
+    	case SCTP_ASSOC_CHANGE:
+    		sac = &snp->sn_assoc_change;
+    		switch(sac->sac_state) {
+    		case SCTP_COMM_UP:
+    			str = "COMMUNICATION UP";
+    			break;
+    		case SCTP_COMM_LOST:
+    			str = "COMMUNICATION LOST";
+    			break;
+    		case SCTP_RESTART:
+    			str = "RESTART";
+    			break;
+    		case SCTP_SHUTDOWN_COMP:
+    			str = "SHUTDOWN COMPLETE";
+    			break;
+    		case SCTP_CANT_STR_ASSOC:
+    			str = "CAN'T START ASSOC";
+    			break;
+    		default:
+    			str = "UNKNOWN";
+    			break;
+    		} /* end switch(sac->sac_state) */
+    		printf("SCTP_ASSOC_CHANGE: %s, assoc=0x%x\n", str,
+    		       (uint32_t)sac->sac_assoc_id);
+    		break;
+    	case SCTP_PEER_ADDR_CHANGE:
+    		spc = &snp->sn_paddr_change;
+    		switch(spc->spc_state) {
+    		case SCTP_ADDR_AVAILABLE:
+    			str = "ADDRESS AVAILABLE";
+    			break;
+    		case SCTP_ADDR_UNREACHABLE:
+    			str = "ADDRESS UNREACHABLE";
+    			break;
+    		case SCTP_ADDR_REMOVED:
+    			str = "ADDRESS REMOVED";
+    			break;
+    		case SCTP_ADDR_ADDED:
+    			str = "ADDRESS ADDED";
+    			break;
+    		case SCTP_ADDR_MADE_PRIM:
+    			str = "ADDRESS MADE PRIMARY";
+    			break;
+    		default:
+    			str = "UNKNOWN";
+    			break;
+    		} /* end switch(spc->spc_state) */
+    		printf("SCTP_PEER_ADDR_CHANGE: %s, addr=%s, assoc=0x%x\n", str,
+    		       Sock_ntop((SA *)&spc->spc_aaddr, sizeof(spc->spc_aaddr)),
+    		       (uint32_t)spc->spc_assoc_id);
+    		break;
+    	case SCTP_REMOTE_ERROR:
+    		sre = &snp->sn_remote_error;
+    		printf("SCTP_REMOTE_ERROR: assoc=0x%x error=%d\n",
+    		       (uint32_t)sre->sre_assoc_id, sre->sre_error);
+    		break;
+    	case SCTP_SEND_FAILED:
+    		ssf = &snp->sn_send_failed;
+    		printf("SCTP_SEND_FAILED: assoc=0x%x error=%d\n",
+    		       (uint32_t)ssf->ssf_assoc_id, ssf->ssf_error);
+    		break;
+    	case SCTP_ADAPTION_INDICATION:
+    		ae = &snp->sn_adaption_event;
+    		printf("SCTP_ADAPTION_INDICATION: 0x%x\n",
+    		    (u_int)ae->sai_adaption_ind);
+    		break;
+    	case SCTP_PARTIAL_DELIVERY_EVENT:
+    	    pdapi = &snp->sn_pdapi_event;
+    	    if(pdapi->pdapi_indication == SCTP_PARTIAL_DELIVERY_ABORTED)
+    		    printf("SCTP_PARTIAL_DELIEVERY_ABORTED\n");
+    	    else
+    		    printf("Unknown SCTP_PARTIAL_DELIVERY_EVENT 0x%x\n",
+    			   pdapi->pdapi_indication);
+    	    break;
+    	case SCTP_SHUTDOWN_EVENT:
+    		sse = &snp->sn_shutdown_event;
+    		printf("SCTP_SHUTDOWN_EVENT: assoc=0x%x\n",
+    		       (uint32_t)sse->sse_assoc_id);
+    		break;
+    	default:
+    		printf("Unknown notification event type=0x%x\n", 
+    		       snp->sn_header.sn_type);
+    	}
+    }
+    ```
+
+### 23.5 无序的数据
+
+- SCTP通常提供可靠的有序数据传输服务，不过也提供可靠的无序数据传输服务
+- 指定MSG_UNORDERED标志发送的消息没有顺序限制
+- 通常情况下，一个给定SCTP流中的所有数据都标以序列化以便排序，该标志使相应数据以无序方式发送，即不标以序列号，一到达对端就能被递送
+
+### 23.6 捆绑地址子集
+
+- TCP和UDP传统上只能捆绑单个地址，而不能捆绑一个地址子集。由SCTP提供的新的sctp_bindx函数调用允许应用进程捆绑不止一个地址，所有地址必须使用相同的端口
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  sctp_bind_arg_list(int sock_fd, char **argv, int argc)
+  {
+  	struct addrinfo *addr;
+  	char *bindbuf, *p, portbuf[10];
+  	int addrcnt=0;
+  	int i;
+  
+  	bindbuf = (char *)Calloc(argc, sizeof(struct sockaddr_storage));
+  	p = bindbuf;
+  	sprintf(portbuf, "%d", SERV_PORT);
+  	for( i=0; i<argc; i++ ) {
+  		addr = Host_serv(argv[i], portbuf, AF_UNSPEC, SOCK_SEQPACKET);
+  		memcpy(p, addr->ai_addr, addr->ai_addrlen);
+  		freeaddrinfo(addr);
+  		addrcnt++;
+  		p += addr->ai_addrlen;
+  	}
+  	Sctp_bindx(sock_fd,(SA *)bindbuf,addrcnt,SCTP_BINDX_ADD_ADDR);
+  	free(bindbuf);
+  	return(0);
+  }
+  ```
+
+### 23.7　确定对端和本端地址信息
+
+- SCTP是一个多宿协议，找出一个关联的本地端点和远程端点所用的地址需要使用不同于单宿协议的机制
+
+- ```c++
+  #include	"unp.h"
+  
+  int
+  main(int argc, char **argv)
+  {
+  	int sock_fd;
+  	struct sockaddr_in servaddr;
+  	struct sctp_event_subscribe evnts;
+  
+  	if(argc != 2)
+  		err_quit("Missing host argument - use '%s host'\n",
+  		       argv[0]);
+          sock_fd = Socket(AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP);
+  	bzero(&servaddr, sizeof(servaddr));
+  	servaddr.sin_family = AF_INET;
+  	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  	servaddr.sin_port = htons(SERV_PORT);
+  	Inet_pton(AF_INET, argv[1], &servaddr.sin_addr);
+  /* include mod_client04 */
+  	bzero(&evnts, sizeof(evnts));
+  	evnts.sctp_data_io_event = 1;
+  	evnts.sctp_association_event = 1;
+  	Setsockopt(sock_fd,IPPROTO_SCTP, SCTP_EVENTS,
+  		   &evnts, sizeof(evnts));
+  
+  	sctpstr_cli(stdin,sock_fd,(SA *)&servaddr,sizeof(servaddr));
+  /* end mod_client04 */
+  	close(sock_fd);
+  	return(0);
+  }
+  ```
+
+- ```c++
+  #include	"unp.h"
+  
+  void
+  sctpstr_cli(FILE *fp, int sock_fd, struct sockaddr *to, socklen_t tolen)
+  {
+  	struct sockaddr_in peeraddr;
+  	struct sctp_sndrcvinfo sri;
+  	char sendline[MAXLINE], recvline[MAXLINE];
+  	socklen_t len;
+  	int out_sz,rd_sz;
+  	int msg_flags;
+  
+  	bzero(&sri,sizeof(sri));
+  	while (fgets(sendline, MAXLINE, fp) != NULL) {
+  		if(sendline[0] != '[') {
+  			printf("Error, line must be of the form '[streamnum]text'\n");
+  			continue;
+  		}
+  		sri.sinfo_stream = strtol(&sendline[1],NULL,0);
+  		out_sz = strlen(sendline);
+  		Sctp_sendmsg(sock_fd, sendline, out_sz, 
+  			     to, tolen, 
+  			     0, 0,
+  			     sri.sinfo_stream,
+  			     0, 0);
+  /* include mod_strcli1 */		
+  		do {
+  			len = sizeof(peeraddr);
+  			rd_sz = Sctp_recvmsg(sock_fd, recvline, sizeof(recvline),
+  				     (SA *)&peeraddr, &len,
+  				     &sri,&msg_flags);
+  			if(msg_flags & MSG_NOTIFICATION)
+  				check_notification(sock_fd,recvline,rd_sz);
+  		} while (msg_flags & MSG_NOTIFICATION);
+  		printf("From str:%d seq:%d (assoc:0x%x):",
+  		       sri.sinfo_stream,sri.sinfo_ssn,
+  		       (u_int)sri.sinfo_assoc_id);
+  		printf("%.*s",rd_sz,recvline);
+  /* end mod_strcli1 */		
+  	}
+  }
+  ```
+
+- ```c++
+  #include	"unp.h"
+  
+  void
+  check_notification(int sock_fd,char *recvline,int rd_len)
+  {
+  	union sctp_notification *snp;
+  	struct sctp_assoc_change *sac;
+  	struct sockaddr_storage *sal,*sar;
+  	int num_rem, num_loc;
+  
+  	snp = (union sctp_notification *)recvline;
+  	if(snp->sn_header.sn_type == SCTP_ASSOC_CHANGE) {
+  		sac = &snp->sn_assoc_change;
+  		if((sac->sac_state == SCTP_COMM_UP) ||
+  		   (sac->sac_state == SCTP_RESTART)) {
+  			num_rem = sctp_getpaddrs(sock_fd,sac->sac_assoc_id,&sar);
+  			printf("There are %d remote addresses and they are:\n",
+  			       num_rem);
+  			sctp_print_addresses(sar,num_rem);
+  			sctp_freepaddrs(sar);
+  
+  			num_loc = sctp_getladdrs(sock_fd,sac->sac_assoc_id,&sal);
+  			printf("There are %d local addresses and they are:\n",
+  			       num_loc);
+  			sctp_print_addresses(sal,num_loc);
+  			sctp_freeladdrs(sal);
+  		}
+  	}
+  
+  }
+  ```
+
+- ```c++
+  #include	"unp.h"
+  
+  void
+  sctp_print_addresses(struct sockaddr_storage *addrs, int num)
+  {
+  	struct sockaddr_storage *ss;
+  	int i,salen;
+  
+  	ss = addrs;
+  	for(i=0; i<num; i++){
+  		printf("%s\n", Sock_ntop((SA *)ss, salen));
+  #ifdef HAVE_SOCKADDR_SA_LEN
+  		salen = ss->ss_len;
+  #else
+  		switch(ss->ss_family) {
+  		case AF_INET:
+  			salen = sizeof(struct sockaddr_in);
+  			break;
+  #ifdef IPV6
+  		case AF_INET6:
+  			salen = sizeof(struct sockaddr_in6);
+  			break;
+  #endif
+  		default:
+  			err_quit("sctp_print_addresses: unknown AF");
+  			break;
+  		}
+  #endif
+  		ss = (struct sockaddr_storage *)((char *)ss + salen);
+  	}
+  }
+  ```
+
+### 23.8 给定IP地址找出关联ID
+
+- 从IP地址到关联ID的转换
+
+  - ```c++
+    #include	"unp.h"
+    
+    sctp_assoc_t
+    sctp_address_to_associd(int sock_fd, struct sockaddr *sa, socklen_t salen)
+    {
+    	struct sctp_paddrparams sp;
+    	int siz;
+    
+    	siz = sizeof(struct sctp_paddrparams);
+    	bzero(&sp,siz);
+    	memcpy(&sp.spp_address,sa,salen);
+    	sctp_opt_info(sock_fd,0,
+    		   SCTP_PEER_ADDR_PARAMS, &sp, &siz);
+    	return(sp.spp_assoc_id);
+    }
+    ```
+
+### 23.9 心博和地址不可达
+
+- SCTP提供类似TCP的保持存活选项的心搏机制，出错门限是认定这个对端地址不可达之前必须发生的心搏遗失即超时重传次数，由心搏检测到该对端地址再次变为可达时，该地址重新开始活跃
+
+- 心搏控制实用函数
+
+  - ```c++
+    #include	"unp.h"
+    
+    int heartbeat_action(int sock_fd, struct sockaddr *sa, socklen_t salen,
+    			  u_int value)
+    {
+    	struct sctp_paddrparams sp;
+    	int siz;
+    
+    	bzero(&sp,sizeof(sp));
+    	sp.spp_hbinterval = value;
+    	memcpy((caddr_t)&sp.spp_address,sa,salen);
+    	Setsockopt(sock_fd,IPPROTO_SCTP,
+    		   SCTP_PEER_ADDR_PARAMS, &sp, sizeof(sp));
+    	return(0);
+    }
+    ```
+
+### 23.10 关联剥离
+
+- 一到多式接口相比一到一式接口存在的优势
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 12-47-10.png)
+
+- 一到多式存在的缺陷: 造成难以编写并发服务器程序
+
+- 增设sctp_peeloff函数，该函数取一个一到多式套接字描述符和一个关联ID,返回一个新的仅仅附以给定关联的一到一式套接字描述符，原始的一到多式套接字继续开放，它代表的其他关联均不受此影响
+
+- 一个并发SCTP服务器程序
+
+  - ```c++
+    #include	"unp.h"
+    
+    int
+    main(int argc, char **argv)
+    {
+    	int sock_fd,msg_flags,connfd,childpid;
+    	sctp_assoc_t assoc;
+    	char readbuf[BUFFSIZE];
+    	struct sockaddr_in servaddr, cliaddr;
+    	struct sctp_sndrcvinfo sri;
+    	struct sctp_event_subscribe evnts;
+    	socklen_t len;
+    	size_t rd_sz;
+    
+            sock_fd = Socket(AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP);
+    	bzero(&servaddr, sizeof(servaddr));
+    	servaddr.sin_family = AF_INET;
+    	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    	servaddr.sin_port = htons(SERV_PORT);
+    
+    	Bind(sock_fd, (SA *) &servaddr, sizeof(servaddr));
+    	
+    	bzero(&evnts, sizeof(evnts));
+    	evnts.sctp_data_io_event = 1;
+    	Setsockopt(sock_fd, IPPROTO_SCTP, SCTP_EVENTS,
+    		   &evnts, sizeof(evnts));
+    
+    	Listen(sock_fd, LISTENQ);
+    /* include mod_servfork */
+    	for ( ; ; ) {
+    		len = sizeof(struct sockaddr_in);
+    		rd_sz = Sctp_recvmsg(sock_fd, readbuf, sizeof(readbuf),
+    			     (SA *)&cliaddr, &len,
+    			     &sri,&msg_flags);
+    		Sctp_sendmsg(sock_fd, readbuf, rd_sz, 
+    			     (SA *)&cliaddr, len,
+    			     sri.sinfo_ppid,
+    			     sri.sinfo_flags,
+    			     sri.sinfo_stream,
+    			     0, 0);
+    		assoc = sctp_address_to_associd(sock_fd,(SA *)&cliaddr,len);
+    		if((int)assoc == 0){
+    			err_ret("Can't get association id");
+    			continue;
+    		} 
+    		connfd = sctp_peeloff(sock_fd,assoc);
+    		if(connfd == -1){
+    			err_ret("sctp_peeloff fails");
+    			continue;
+    		}
+    		if((childpid = fork()) == 0) {
+    			Close(sock_fd);
+    			str_echo(connfd);
+    			exit(0);
+    		} else {
+    			Close(connfd);
+    		}
+    	}
+    /* end mod_servfork */
+    }
+    ```
+
+### 23.11 定时控制
+
+- 一些定时控制量，它们影响SCTP端点需多久才能声称某个关联或某个对端地址已经失效
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 13-03-10.png)
+
+### 23.12 何时改用SCTP代替TCP
+
+- SCTP的益处
+
+  - 直接支持多宿，一个端点可以利用它的多个直接连接的网络获得额外的可靠性
+  - 可以消除头端阻塞，应用进程可以使用单个SCTP关联并行地传输多个数据元素
+  - 保持应用层消息边界
+  - 提供无序消息服务
+  - 提供部分可靠服务，允许SCTP发送端为每个消息指定一个生命期
+  - 提供TCP的许多特性: 正面确认，重传丢失数据、重排数据、窗口式流量控制、慢启动、拥塞避免、选择性确认
+
+- SCTP不提供TCP的半关闭状态
+
+- SCTP不提供TCP的紧急数据
+
+- 不能从SCTP真正获益的是那些确实必须使用面向字节流传输服务的应用，如telnet, TCP能够比SCTP更高效地把字节流分割分装到TCP分节中
+
+- SCTP忠实地保持消息边界，当每个消息的长度仅仅是一个字节时ｍSCTP封装消息到数据块的效率很低
+
+
+
+
+## 第24章　带外数据
+
+- 带外数据: 一个连接的某端发生了重要的事情，而且该端希望迅速通告其对端，带外数据被认为具有比普通数据更高的优先级
+- UDP没有实现带外数据
+
+### 24.2 TCP带外数据
+
+- TCP并没有真正的带外数据，不过提供了紧急模式
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 13-37-07.png)
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 13-37-29.png)
+
+- TCP紧急指针对应一个TCP序列号，它是使用MSG_OOB标志写出的最后一个数据字节对应的序列号加1
+
+- 即便数据的流动会因为TCP的流量控制而停止，紧急通知却总是无障碍地发送到对端
+
+- 只有一个OOB标记，如果新的OOB字节在旧的OOB字节被读取之前就到达，旧的被丢弃
+
+- 如果接收进程开启了SO_OOBINLINE套接字选项，那么由TCP紧急指针指向的实际数据字节将被留在通常的套接字接收缓冲区中，否则被放入一个独立的单字节带外缓冲区
+
+- 当有新的紧急指针到达时，内核给接收套接字的属主进程发送SIGURG信号
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 14-20-23.png)
+
+- 简单的带外发送程序
+
+  - ```c++
+    #include	"unp.h"
+    
+    int
+    main(int argc, char **argv)
+    {
+    	int		sockfd;
+    
+    	if (argc != 3)
+    		err_quit("usage: tcpsend01 <host> <port#>");
+    
+    	sockfd = Tcp_connect(argv[1], argv[2]);
+    
+    	Write(sockfd, "123", 3);
+    	printf("wrote 3 bytes of normal data\n");
+    	sleep(1);
+    
+    	Send(sockfd, "4", 1, MSG_OOB);
+    	printf("wrote 1 byte of OOB data\n");
+    	sleep(1);
+    
+    	Write(sockfd, "56", 2);
+    	printf("wrote 2 bytes of normal data\n");
+    	sleep(1);
+    
+    	Send(sockfd, "7", 1, MSG_OOB);
+    	printf("wrote 1 byte of OOB data\n");
+    	sleep(1);
+    
+    	Write(sockfd, "89", 2);
+    	printf("wrote 2 bytes of normal data\n");
+    	sleep(1);
+    
+    	exit(0);
+    }
+    ```
+
+- 简单的带外接收程序
+
+  - ```c++
+    #include	"unp.h"
+    
+    int		listenfd, connfd;
+    
+    void	sig_urg(int);
+    
+    int
+    main(int argc, char **argv)
+    {
+    	int		n;
+    	char	buff[100];
+    
+    	if (argc == 2)
+    		listenfd = Tcp_listen(NULL, argv[1], NULL);
+    	else if (argc == 3)
+    		listenfd = Tcp_listen(argv[1], argv[2], NULL);
+    	else
+    		err_quit("usage: tcprecv01 [ <host> ] <port#>");
+    
+    	connfd = Accept(listenfd, NULL, NULL);
+    
+    	Signal(SIGURG, sig_urg);
+    	Fcntl(connfd, F_SETOWN, getpid());
+    
+    	for ( ; ; ) {
+    		if ( (n = Read(connfd, buff, sizeof(buff)-1)) == 0) {
+    			printf("received EOF\n");
+    			exit(0);
+    		}
+    		buff[n] = 0;	/* null terminate */
+    		printf("read %d bytes: %s\n", n, buff);
+    	}
+    }
+    
+    void
+    sig_urg(int signo)
+    {
+    	int		n;
+    	char	buff[100];
+    
+    	printf("SIGURG received\n");
+    	n = Recv(connfd, buff, sizeof(buff)-1, MSG_OOB);
+    	buff[n] = 0;		/* null terminate */
+    	printf("read %d OOB byte: %s\n", n, buff);
+    }
+    ```
+
+  - 发送进程带外数据的每次产生递交给接收进程的SIGURG信号，后者接着读入单个带外字节
+
+- 改用select代替SIGURG信号重新编写带外接收程序
+
+  - ```c++
+    #include	"unp.h"
+    
+    int
+    main(int argc, char **argv)
+    {
+    	int		listenfd, connfd, n, justreadoob = 0;
+    	char	buff[100];
+    	fd_set	rset, xset;
+    
+    	if (argc == 2)
+    		listenfd = Tcp_listen(NULL, argv[1], NULL);
+    	else if (argc == 3)
+    		listenfd = Tcp_listen(argv[1], argv[2], NULL);
+    	else
+    		err_quit("usage: tcprecv03 [ <host> ] <port#>");
+    
+    	connfd = Accept(listenfd, NULL, NULL);
+    
+    	FD_ZERO(&rset);
+    	FD_ZERO(&xset);
+    	for ( ; ; ) {
+    		FD_SET(connfd, &rset);
+    		if (justreadoob == 0)
+    			FD_SET(connfd, &xset);
+    
+    		Select(connfd + 1, &rset, NULL, &xset, NULL);
+    
+    		if (FD_ISSET(connfd, &xset)) {
+    			n = Recv(connfd, buff, sizeof(buff)-1, MSG_OOB);
+    			buff[n] = 0;		/* null terminate */
+    			printf("read %d OOB byte: %s\n", n, buff);
+    			justreadoob = 1;
+    			FD_CLR(connfd, &xset);
+    		}
+    
+    		if (FD_ISSET(connfd, &rset)) {
+    			if ( (n = Read(connfd, buff, sizeof(buff)-1)) == 0) {
+    				printf("received EOF\n");
+    				exit(0);
+    			}
+    			buff[n] = 0;	/* null terminate */
+    			printf("read %d bytes: %s\n", n, buff);
+    			justreadoob = 0;
+    		}
+    	}
+    }
+    ```
+
+### 24.3 sockatmark函数
+
+- 每收到一个带外数据时，就有一个与之关联的带外标记，这是发送进程发送带外字节时该字节在发送端普通数据流中的位置，在从套接字读入期间，接收进程通过调用sockatmark函数确定是否处于带外标记
+- 带外标记的常见用法之一是接收进程特殊地对待所有数据，直到越过它
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 14-11-56.png)
+
+- 调用sockatmark的接收程序
+
+  - ```c++
+    #include	"unp.h"
+    
+    int
+    main(int argc, char **argv)
+    {
+    	int		listenfd, connfd, n, on=1;
+    	char	buff[100];
+    
+    	if (argc == 2)
+    		listenfd = Tcp_listen(NULL, argv[1], NULL);
+    	else if (argc == 3)
+    		listenfd = Tcp_listen(argv[1], argv[2], NULL);
+    	else
+    		err_quit("usage: tcprecv04 [ <host> ] <port#>");
+    
+    	Setsockopt(listenfd, SOL_SOCKET, SO_OOBINLINE, &on, sizeof(on));
+    
+    	connfd = Accept(listenfd, NULL, NULL);
+    	sleep(5);
+    
+    	for ( ; ; ) {
+    		if (Sockatmark(connfd))
+    			printf("at OOB mark\n");
+    
+    		if ( (n = Read(connfd, buff, sizeof(buff)-1)) == 0) {
+    			printf("received EOF\n");
+    			exit(0);
+    		}
+    		buff[n] = 0;	/* null terminate */
+    		printf("read %d bytes: %s\n", n, buff);
+    	}
+    }
+    ```
+
+- 带外数据的另外两个特性
+  - 即使因为流量控制而停止发送数据了，TCP仍然发送带外数据的通知(即它的紧急指针)
+  - 在带外数据到达之前，接收进程可能被通知说发送进程已经发送了带外数据(使用SIGURG或select),如果接收进程接着指定MSG_OOB调用recv,而带外数据却未到达，将返回错误。解决办法是让接收进程通过读入已排队的普通数据，在套接字缓冲区中腾出空间，这将导致接收端TCP向发送端通告一个非0的窗口，最终允许发送端发送带外数据
+- 一个给定TCP连接只有一个带外标记，如果在接收进程读入某个现有带外数据之前有新的带外数据到达，先前的标记就丢失
+
+### 24.4 TCP带外数据小结
+
+- 对于TCP的紧急模式，可以认为URG标志是通知，紧急指针是带外标记，数据字节是其本身
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 14-36-51.png)
+
+- 每个连接只有一个TCP紧急指针，每个连接只有一个带外标记，每个连接只有一个单字节的带外缓冲区
+
+### 24.5 客户/服务器心搏函数
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 14-44-41.png)
+
+## 第25章　信号驱动式I/O
+
+- 进程预先告知内核，使得当某个描述符上发生某事时，内核使用信号通知相关进程
+- 信号驱动式I/O和异步I/O的差异
+
+### 25.2 套接字的信号驱动式I/O
+
+- 3个步骤
+  - 建立SIGIO信号的信号处理函数
+  - 设置该套接字的属主，使用fcntl的F_SETOWN命令
+  - 开启该套接字的信号驱动式I/O,使用fcntl的F_SETFL命令打开O_ASYNC标志
+- 对于UDP套接字的SIGIO信号
+  - SIGIO信号在以下事件发生
+    - 数据报到达套接字
+    - 套接字上发生异步错误
+- 对于TCP套接字的SIGIO信号
+  - 下列条件
+    - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 15-01-41.png)
+
+- 构建一个UDP服务器的两种方式
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 15-02-26.png)
+
+### 25.3 使用SIGIO的UDP回射服务器程序
+
+```c++
+/* include dgecho1 */
+#include	"unp.h"
+
+static int		sockfd;
+
+#define	QSIZE	   8		/* size of input queue */
+#define	MAXDG	4096		/* max datagram size */
+
+typedef struct {
+  void		*dg_data;		/* ptr to actual datagram */
+  size_t	dg_len;			/* length of datagram */
+  struct sockaddr  *dg_sa;	/* ptr to sockaddr{} w/client's address */
+  socklen_t	dg_salen;		/* length of sockaddr{} */
+} DG;
+static DG	dg[QSIZE];			/* queue of datagrams to process */
+static long	cntread[QSIZE+1];	/* diagnostic counter */
+
+static int	iget;		/* next one for main loop to process */
+static int	iput;		/* next one for signal handler to read into */
+static int	nqueue;		/* # on queue for main loop to process */
+static socklen_t clilen;/* max length of sockaddr{} */
+
+static void	sig_io(int);
+static void	sig_hup(int);
+/* end dgecho1 */
+
+/* include dgecho2 */
+void
+dg_echo(int sockfd_arg, SA *pcliaddr, socklen_t clilen_arg)
+{
+	int			i;
+	const int	on = 1;
+	sigset_t	zeromask, newmask, oldmask;
+
+	sockfd = sockfd_arg;
+	clilen = clilen_arg;
+
+	for (i = 0; i < QSIZE; i++) {	/* init queue of buffers */
+		dg[i].dg_data = Malloc(MAXDG);
+		dg[i].dg_sa = Malloc(clilen);
+		dg[i].dg_salen = clilen;
+	}
+	iget = iput = nqueue = 0;
+
+	Signal(SIGHUP, sig_hup);
+	Signal(SIGIO, sig_io);
+	Fcntl(sockfd, F_SETOWN, getpid());
+	Ioctl(sockfd, FIOASYNC, &on);
+	Ioctl(sockfd, FIONBIO, &on);
+
+	Sigemptyset(&zeromask);		/* init three signal sets */
+	Sigemptyset(&oldmask);
+	Sigemptyset(&newmask);
+	Sigaddset(&newmask, SIGIO);	/* signal we want to block */
+
+	Sigprocmask(SIG_BLOCK, &newmask, &oldmask);
+	for ( ; ; ) {
+		while (nqueue == 0)
+			sigsuspend(&zeromask);	/* wait for datagram to process */
+
+			/* 4unblock SIGIO */
+		Sigprocmask(SIG_SETMASK, &oldmask, NULL);
+
+		Sendto(sockfd, dg[iget].dg_data, dg[iget].dg_len, 0,
+			   dg[iget].dg_sa, dg[iget].dg_salen);
+
+		if (++iget >= QSIZE)
+			iget = 0;
+
+			/* 4block SIGIO */
+		Sigprocmask(SIG_BLOCK, &newmask, &oldmask);
+		nqueue--;
+	}
+}
+/* end dgecho2 */
+
+/* include sig_io */
+static void
+sig_io(int signo)
+{
+	ssize_t		len;
+	int			nread;
+	DG			*ptr;
+
+	for (nread = 0; ; ) {
+		if (nqueue >= QSIZE)
+			err_quit("receive overflow");
+
+		ptr = &dg[iput];
+		ptr->dg_salen = clilen;
+		len = recvfrom(sockfd, ptr->dg_data, MAXDG, 0,
+					   ptr->dg_sa, &ptr->dg_salen);
+		if (len < 0) {
+			if (errno == EWOULDBLOCK)
+				break;		/* all done; no more queued to read */
+			else
+				err_sys("recvfrom error");
+		}
+		ptr->dg_len = len;
+
+		nread++;
+		nqueue++;
+		if (++iput >= QSIZE)
+			iput = 0;
+
+	}
+	cntread[nread]++;		/* histogram of # datagrams read per signal */
+}
+/* end sig_io */
+
+/* include sig_hup */
+static void
+sig_hup(int signo)
+{
+	int		i;
+
+	for (i = 0; i <= QSIZE; i++)
+		printf("cntread[%d] = %ld\n", i, cntread[i]);
+}
+/* end sig_hup */
+```
+

@@ -755,7 +755,9 @@
 ### 11.3 jiffies
 
 - 全局变量jiffies用来记录自系统启动以来产生的节拍的总数，无符号长整型
+
 - jiffies的内部表示
+
   - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 16-38-39.png)
 
 - jiffies的回绕
@@ -763,4 +765,78 @@
   - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-13 16-42-03.png)
 
 - 用户空间和HZ
+
   - 内核定义了USER_HZ来代表用户空间看到的HZ值，为100,可以使用jiffies_to_clock_t()将一个由HZ表示的节拍计数器转换成一个由USER_HZ表示的节拍计数
+
+### 11.4 硬时钟和定时器
+
+- 实时时钟
+  - 实时时钟(RTC）是用来持久存放系统时间的设备，RTC和CMOS继承在一起，通过同一个电池供电
+  - 内核通过读取RTC来初始化墙上时间，该变量存放在xtime变量中
+- 系统定时器
+  - 提供一种周期性触发中断机制
+  - 主要采用可编程中断时钟(PIT)
+
+### 11.5 时钟中断处理程序
+
+- 分为体系结构相关部分和体系结构无关部分
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 16-28-45.png)
+
+- tick_periodic执行下面的工作
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 16-29-08.png)
+
+- 内核对进程进行时间计数时，是根据中断发生时处理器所处的模式进行分类统计的
+
+### 11.6 实际时间
+
+- 当前实际时间(墙上时间)　xtime
+- 读写xtime变量需要使用xtime_lock锁，该锁是seqlock锁
+
+### 11.7 定时器
+
+- 动态定时器不断地创建和撤销，而且它的运行次数也不受限制
+- 指定的函数将在定时器到期时自动执行
+- 使用定时器
+  - 定时器由结构timer_list表示
+- 定时器竞争条件
+  - 因为定时器与当前执行代码是异步的，就有可能存在潜在的竞争条件
+- 实现定时器
+  - 定时器作为软中断在下半部上下文中执行
+
+### 11.8 延迟执行
+
+- 忙等待
+
+  - 在循环中不断旋转直到希望的时钟节拍数耗尽
+  - 关键字volatile指示编译器在每次访问变量时都重新从主内存中获得，而不是通过寄存器中的变量别名来访问
+- 短延迟
+- schedule_timeout
+
+## 第12章　内存管理
+
+### 12.1 页
+
+- 内存管理单元MMU通常以页为单位管理系统中的页表
+- 内存用struct page结构表示系统中的每个物理页
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 17-22-40.png)
+  - flag域用来存放页的状态
+  - _count域存放页的引用计数
+  - virtual域是页的虚拟地址
+  - page结构与物理页相关，而并非与虚拟页相关
+  - 系统中的每个物理页都要分配一个这样的结构体
+
+### 12.2 区
+
+- 内核使用区对具有相似特性的页进行分组
+- Linux主要使用了四种区
+  - ZONE_DMA
+  - ZONE_DMA32
+  - ZONE_NORMAL
+  - ZONE_HIGHEM
+
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 17-32-46.png)
+
+- x86-64没有ZONE_HIGHMEM区，所有的物理内存都位于ZONE_DMA和ZONE_NORMAL
+- 每个区都用struct zone表示
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 17-35-18.png)
+
