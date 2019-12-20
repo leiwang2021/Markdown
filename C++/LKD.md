@@ -840,3 +840,83 @@
 - 每个区都用struct zone表示
 - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-16 17-35-18.png)
 
+### 12.3 获得页
+
+- alloc_pages 分配2^order个连续的物理页
+- page_address 指向给定物理页当前所在的逻辑地址
+- 获得填充为0的页
+  - get_zerod_page
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 15-42-30.png)
+
+- 释放页
+  - __free_pages
+  - free_pages
+  - free_page
+  - 只能释放自己的页
+
+### 12.4 kmalloc
+
+- 可以获得以字节为单位的一块内核内存
+- 所分配的内存区在物理上是连续的
+
+- gfp_mask标志
+
+  - 分配器标志，行为修饰符表示内核应当如何分配所需的内存，区修饰符表示从哪儿分配内存，类型标志组合了行为修饰符和区修饰符
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 15-51-53.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 15-58-21.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 16-00-10.png)
+
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 16-08-20.png)
+
+- kfree
+  - kfree释放由kmalloc分配出来的内存块
+
+### 12.5 vmalloc
+
+- vmalloc分配的内存虚拟地址是连续的，而物理地址则无需连续
+- 硬件设备用到的任何内存区都必须是物理上连续的块，而供软件使用的内存块可以使用只有虚拟地址连续的内存块
+- 函数可以睡眠
+- vfree释放
+
+### 12.6 slab层
+
+- slab分配器
+- ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 16-20-06.png)
+
+- slab层的设计
+
+  - slab由一个或多个物理上连续的页组成，每个高速缓存可以由多个slab组成，每个slab都包含一些对象成员，指的是被缓存的数据结构
+  - ![](/home/leiwang/Markdown/C++/picture/Screenshot from 2019-12-18 16-24-06.png)
+
+  - 每个高速缓存都使用kmeme_cache结构来表示，包含三个链表: slabs_full  slabs_partial  slabs_empty,这些链表包含高速缓存中的所有slab
+
+- slab分配器的接口
+
+  - kmeme_cache_create 创建一个新的高速缓存
+  - kmem_cache_destroy　撤销一个高速缓存
+  - 从缓存中分配
+    - kmeme_cache_alloc 从给定的高速缓存cachep中返回一个指向对象的指针
+    - kemem_cache_free 释放一个对象，返回给原先的slab
+  - slab分配器的使用实例
+    - 创建一个名为task_struct的高速缓存，存放的struct task__struct的对象
+  - 如果需要创建很多相同类型的对象，那么就应该考虑使用slab高速缓存。不要自己实现空闲链表
+
+
+
+### 12.7 在栈上的静态分配
+
+- 每个进程的内核栈大小既依赖于体系结构，也与编译时的选项有关
+- 单页内核栈
+- 在栈上光明正大地工作
+  - 当栈溢出时，多出的数据就会直接溢出来，覆盖掉紧邻堆栈末端的东西
+
+### 12.8 高端内存的映射
+
+### 12.9 每个CPU的分配
+
+### 12.10 新的每个CPU接口
+
+## 第13章　虚拟文件系统
+
