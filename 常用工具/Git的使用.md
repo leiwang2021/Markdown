@@ -140,6 +140,10 @@ git remote add origin git@github.com:leiwang2021/learn.git
 
 - Git支持多种协议，默认的`git://`使用ssh，但也可以使用`https`等其他协议。 
 
+- 从远程克隆得到的仓库也可以从本地推送到远程仓库
+
+  - git push origin master
+
 ## 分支管理
 
 ### 创建与合并分支
