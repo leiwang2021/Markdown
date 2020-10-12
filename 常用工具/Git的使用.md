@@ -178,6 +178,12 @@ git remote add origin git@github.com:leiwang2021/learn.git
 
 用`git log --graph`命令可以看到分支合并图
 
+- 解决本地代码与远程冲突
+  - 完全放弃本地代码，同步远程master分支
+    - git fetch --all
+    - git reset  --hard  origin/master
+    - git pull
+
 ### 分支管理策略
 
 在实际开发中，我们应该按照几个基本原则进行分支管理：
